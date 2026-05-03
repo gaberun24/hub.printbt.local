@@ -1,0 +1,88 @@
+{% extends "app.html" %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Kategóriák</h1>
+<div class="greeting-date">Rendelő modul · katalógus-csoportok</div>
+
+{% if error %}
+  <div class="auth-error" role="alert" style="margin-top: 16px;">{{ error }}</div>
+{% endif %}
+
+<div class="panel" style="margin-top: 24px;">
+  <div class="panel-header">
+    <div class="panel-title">Új kategória</div>
+  </div>
+  <div class="panel-body">
+    <form method="post" action="/admin/rendelo/categories/new">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Név</label>
+          <input class="form-input" name="name" required placeholder="Pl. Toner">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Szín (hex)</label>
+          <input class="form-input" name="color" value="#8A8474" pattern="#[0-9A-Fa-f]{6}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sorrend</label>
+          <input class="form-input" name="sort_order" type="number" value="100">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-accent">Kategória hozzáadása</button>
+    </form>
+  </div>
+</div>
+
+<div class="panel" style="margin-top: 16px;">
+  <div class="panel-header">
+    <div class="panel-title">{{ categories|length }} kategória</div>
+  </div>
+  {% if not categories %}
+    <div class="panel-body" style="color: var(--ink-subtle);">Még nincs kategória.</div>
+  {% else %}
+    <div style="overflow-x: auto;">
+      <table style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: var(--surface-2); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted);">
+            <th style="text-align:left; padding: 10px 16px;">Név</th>
+            <th style="text-align:left; padding: 10px 16px;">Szín</th>
+            <th style="text-align:right; padding: 10px 16px;">Sorrend</th>
+            <th style="text-align:right; padding: 10px 16px;">Tételek</th>
+            <th style="text-align:right; padding: 10px 16px;">Akció</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cat in categories %}
+            <tr style="border-bottom: 1px solid var(--border);">
+              <form method="post" action="/admin/rendelo/categories/{{ cat.id }}/update" style="display: contents;">
+                <td style="padding: 10px 16px;">
+                  <span class="cat-dot" style="--cat-color: {{ cat.color }}; margin-right: 8px; vertical-align: middle;"></span>
+                  <input class="form-input" name="name" value="{{ cat.name }}" style="width: 240px; padding: 4px 8px;">
+                </td>
+                <td style="padding: 10px 16px;">
+                  <input class="form-input" name="color" value="{{ cat.color }}" style="width: 110px; padding: 4px 8px; font-family: var(--font-mono);">
+                </td>
+                <td style="padding: 10px 16px; text-align:right;">
+                  <input class="form-input" name="sort_order" type="number" value="{{ cat.sort_order }}" style="width: 70px; padding: 4px 8px; text-align:right; font-family: var(--font-mono);">
+                </td>
+                <td style="padding: 10px 16px; text-align:right; font-family: var(--font-mono); font-size: 12px;">
+                  {{ item_counts.get(cat.id, 0) }}
+                </td>
+                <td style="padding: 10px 16px; text-align:right; white-space: nowrap;">
+                  <button type="submit" class="btn" style="font-size: 11px; padding: 5px 10px;">Mentés</button>
+                </td>
+              </form>
+              <td style="padding: 10px 16px; text-align:right; white-space: nowrap; padding-left: 0;">
+                <form method="post" action="/admin/rendelo/categories/{{ cat.id }}/delete" style="display:inline;"
+                      onsubmit="return confirm('Biztosan törlöd a {{ cat.name }} kategóriát?');">
+                  <button type="submit" class="btn btn-ghost" style="font-size: 11px; padding: 5px 10px; color: var(--accent);">Törlés</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

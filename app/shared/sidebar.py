@@ -31,6 +31,10 @@ _ICON_CHECK = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="current
 _ICON_BOX = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>'
 _ICON_USERS = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>'
 _ICON_SHEET = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>'
+_ICON_USER_SETTINGS = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
+_ICON_INVITE = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>'
+_ICON_TAG = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>'
+_ICON_CATALOG = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>'
 
 
 @dataclass(frozen=True)
@@ -151,6 +155,41 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
                 href="/sheet",
                 icon=_ICON_SHEET,
                 visible=lambda u: u.is_admin or u.is_designer or u.is_workshop,
+            ),
+        ),
+    ),
+    NavSection(
+        key="admin",
+        label="Admin",
+        marker=None,
+        items=(
+            NavItem(
+                key="admin_users",
+                label="Userek",
+                href="/admin/users",
+                icon=_ICON_USER_SETTINGS,
+                visible=lambda u: u.is_admin,
+            ),
+            NavItem(
+                key="admin_invites",
+                label="Meghívók",
+                href="/admin/invites",
+                icon=_ICON_INVITE,
+                visible=lambda u: u.is_admin,
+            ),
+            NavItem(
+                key="admin_rendelo_categories",
+                label="Kategóriák",
+                href="/admin/rendelo/categories",
+                icon=_ICON_TAG,
+                visible=lambda u: u.is_admin,
+            ),
+            NavItem(
+                key="admin_rendelo_items",
+                label="Tételek",
+                href="/admin/rendelo/items",
+                icon=_ICON_CATALOG,
+                visible=lambda u: u.is_admin,
             ),
         ),
     ),

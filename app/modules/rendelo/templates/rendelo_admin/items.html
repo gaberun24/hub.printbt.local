@@ -1,0 +1,90 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/admin/rendelo/items/new" class="btn btn-accent">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Új tétel
+  </a>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Tételek</h1>
+<div class="greeting-date">Rendelő modul · katalógus</div>
+
+<div class="stock-toolbar" style="margin-top: 24px;">
+  <a href="/admin/rendelo/items{% if show_inactive %}?show_inactive=true{% endif %}"
+     class="filter-chip {% if not active_cat %}active{% endif %}">
+    Mind <span class="count">{{ items|length if not active_cat else "—" }}</span>
+  </a>
+  {% for cat in categories %}
+    <a href="/admin/rendelo/items?cat={{ cat.id }}{% if show_inactive %}&show_inactive=true{% endif %}"
+       class="filter-chip {% if active_cat == cat.id %}active{% endif %}"
+       style="--cat-color: {{ cat.color }};">
+      <span class="cat-dot" aria-hidden="true"></span>{{ cat.name }}
+    </a>
+  {% endfor %}
+  <div style="margin-left: auto;">
+    {% if show_inactive %}
+      <a href="/admin/rendelo/items{% if active_cat %}?cat={{ active_cat }}{% endif %}" class="filter-chip">
+        Csak aktív
+      </a>
+    {% else %}
+      <a href="/admin/rendelo/items?show_inactive=true{% if active_cat %}&cat={{ active_cat }}{% endif %}" class="filter-chip">
+        Inaktívakat is
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">{{ items|length }} tétel</div>
+  </div>
+  {% if not items %}
+    <div class="panel-body" style="color: var(--ink-subtle);">
+      Nincs ilyen tétel. <a href="/admin/rendelo/items/new" style="color: var(--accent); font-weight: 500;">Adj fel egy újat</a>.
+    </div>
+  {% else %}
+    <div style="overflow-x: auto;">
+      <table style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: var(--surface-2); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted);">
+            <th style="text-align:left; padding: 10px 16px;">Név</th>
+            <th style="text-align:left; padding: 10px 16px;">Brand · Code</th>
+            <th style="text-align:left; padding: 10px 16px;">Méretek</th>
+            <th style="text-align:left; padding: 10px 16px;">Beszállító</th>
+            <th style="text-align:left; padding: 10px 16px;">Egység</th>
+            <th style="text-align:center; padding: 10px 16px;">Aktív</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in items %}
+            <tr style="border-bottom: 1px solid var(--border); cursor: pointer;"
+                onclick="window.location='/admin/rendelo/items/{{ it.id }}'">
+              <td style="padding: 10px 16px;">
+                <div style="font-weight: 600;">{{ it.name }}</div>
+                {% if it.description %}
+                  <div style="font-size: 11px; color: var(--ink-subtle); margin-top: 2px;">{{ it.description[:80] }}{% if it.description|length > 80 %}…{% endif %}</div>
+                {% endif %}
+              </td>
+              <td style="padding: 10px 16px; font-family: var(--font-mono); font-size: 12px;">
+                {% if it.brand %}<strong>{{ it.brand }}</strong>{% endif %}{% if it.code %} · {{ it.code }}{% endif %}
+              </td>
+              <td style="padding: 10px 16px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);">{{ it.sizes or "—" }}</td>
+              <td style="padding: 10px 16px; font-size: 12px;">{{ it.supplier or "—" }}</td>
+              <td style="padding: 10px 16px; font-family: var(--font-mono); font-size: 12px;">{{ it.default_unit }}</td>
+              <td style="padding: 10px 16px; text-align: center;">
+                {% if it.active %}
+                  <span class="req-status-pill uj">aktív</span>
+                {% else %}
+                  <span class="req-status-pill lezart">inaktív</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

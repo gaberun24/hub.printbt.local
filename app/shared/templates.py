@@ -149,3 +149,41 @@ templates.env.filters["hu_date"] = _hu_date
 templates.env.filters["status_hu"] = _status_hu
 templates.env.filters["status_hu_class"] = _status_hu_class
 templates.env.filters["from_json"] = _from_json
+
+
+def _now():
+    """Jinja-global `now()` — naive UTC datetime. Pl. érvényesség
+    ellenőrzéshez (`inv.expires_at <= now()`)."""
+    from app.shared.models import utcnow
+
+    return utcnow()
+
+
+def _has_flag(obj, flag: str) -> bool:
+    """`obj|has_flag("is_admin")` — dinamikus role-flag lekérdezés Jinja-ban.
+
+    A `|attr(name)` szintaxis nem működik minden Jinja-verzióban, ezért
+    ez a filter direkt `getattr`-rel olvas.
+    """
+    return bool(getattr(obj, flag, False))
+
+
+_ROLE_SHORT = {
+    "is_intake": "FELV",
+    "is_designer": "GRAF",
+    "is_workshop": "MŰH",
+    "is_quote_handler": "ÁRA",
+    "is_orderer": "REN",
+    "is_admin": "ADM",
+}
+
+
+def _role_short(flag: str) -> str:
+    """`flag|role_short` — `is_intake` → `FELV` stb. A user-card és az
+    invite-lista role-dot rövidítései egységesen ide jönnek."""
+    return _ROLE_SHORT.get(flag, flag.removeprefix("is_")[:4].upper())
+
+
+templates.env.globals["now"] = _now
+templates.env.filters["has_flag"] = _has_flag
+templates.env.filters["role_short"] = _role_short

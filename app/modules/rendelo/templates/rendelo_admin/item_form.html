@@ -1,0 +1,93 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/admin/rendelo/items" class="btn">Mégsem</a>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">
+  {% if item %}Tétel <em>szerkesztése</em>{% else %}Új <em>tétel</em>{% endif %}
+</h1>
+<div class="greeting-date">Rendelő modul · katalógus</div>
+
+{% if error %}
+  <div class="auth-error" role="alert" style="margin-top: 16px; max-width: 720px;">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="{% if item %}/admin/rendelo/items/{{ item.id }}/update{% else %}/admin/rendelo/items/new{% endif %}"
+      style="max-width: 720px; margin-top: 24px;">
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Alapadatok</div>
+    </div>
+    <div class="panel-body">
+      <div class="form-group">
+        <label class="form-label">Név</label>
+        <input class="form-input" name="name" value="{{ item.name if item else '' }}" required
+               placeholder="Pl. HP CF280X fekete toner">
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Kategória</label>
+          <select class="form-input" name="category_id" required>
+            {% for cat in categories %}
+              <option value="{{ cat.id }}" {% if item and item.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Egység</label>
+          <input class="form-input" name="default_unit" value="{{ item.default_unit if item else 'db' }}"
+                 placeholder="db / l / csomag">
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Brand</label>
+          <input class="form-input" name="brand" value="{{ item.brand if item else '' }}"
+                 placeholder="Pl. Malfini">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Code (cikkszám)</label>
+          <input class="form-input" name="code" value="{{ item.code if item else '' }}"
+                 placeholder="Pl. H6400">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Méretek (szabadszöveges)</label>
+        <input class="form-input" name="sizes" value="{{ item.sizes if item else '' }}"
+               placeholder="Pl. XS-5XL · 30ml/50ml">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Beszállító</label>
+        <input class="form-input" name="supplier" value="{{ item.supplier if item else '' }}"
+               placeholder="Pl. Office365 Kft.">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Leírás (opcionális)</label>
+        <textarea class="form-textarea" name="description" placeholder="Pl. 200g/m², matt, 100lap/csomag">{{ item.description if item else '' }}</textarea>
+      </div>
+
+      {% if item %}
+        <label class="form-checkbox" style="margin-top: 12px;">
+          <input type="checkbox" name="active" {% if item.active %}checked{% endif %}>
+          Aktív (a katalógusban megjelenik)
+        </label>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <button type="submit" class="btn btn-accent">
+      {% if item %}Mentés{% else %}Tétel létrehozása{% endif %}
+    </button>
+    <a href="/admin/rendelo/items" class="btn btn-ghost">Mégsem</a>
+  </div>
+</form>
+{% endblock %}

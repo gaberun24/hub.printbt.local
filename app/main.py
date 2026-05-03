@@ -13,8 +13,9 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
+from app.modules.rendelo.routes import admin as rendelo_admin
 from app.modules.rendelo.routes import views as rendelo_views
-from app.routes import auth, views
+from app.routes import admin, auth, views
 from app.shared.config import ensure_dirs, settings
 from app.shared.db import init_db
 from app.shared.dependencies import AuthRedirectError, auth_redirect_response
@@ -44,5 +45,11 @@ async def _auth_redirect_handler(_request: Request, _exc: AuthRedirectError):
 
 
 app.include_router(auth.router)
+# Admin route-ok ELŐBB legyenek, mint a `/{request_id}` dynamikus path
+# a `rendelo_views`-ban — különben pl. `/admin/rendelo/categories` `/{request_id}`
+# alá esne és 404-et adna. A `rendelo_admin.router` saját prefixe `/admin/rendelo`,
+# tehát nem ütközik, de az `admin.router` (`/admin`) sem.
+app.include_router(admin.router)
+app.include_router(rendelo_admin.router)
 app.include_router(rendelo_views.router)
 app.include_router(views.router)

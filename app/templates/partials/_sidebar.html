@@ -18,12 +18,9 @@
     <div class="user-info">
       <div class="user-name">{{ user.name }}</div>
       <div class="user-roles">
-        {% if user.is_intake %}<span class="role-dot">FELV</span>{% endif %}
-        {% if user.is_designer %}<span class="role-dot">GRAF</span>{% endif %}
-        {% if user.is_workshop %}<span class="role-dot">MŰH</span>{% endif %}
-        {% if user.is_quote_handler %}<span class="role-dot">ÁRA</span>{% endif %}
-        {% if user.is_orderer %}<span class="role-dot">REN</span>{% endif %}
-        {% if user.is_admin %}<span class="role-dot">ADM</span>{% endif %}
+        {% for f in ["is_intake", "is_designer", "is_workshop", "is_quote_handler", "is_orderer", "is_admin"] %}
+          {% if user|has_flag(f) %}<span class="role-dot">{{ f|role_short }}</span>{% endif %}
+        {% endfor %}
       </div>
     </div>
   </div>
