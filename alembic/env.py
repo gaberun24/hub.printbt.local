@@ -12,7 +12,10 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
-# Hub modellek importálása — regisztrálja a Base.metadata-t
+# Hub modellek importálása — regisztrálja a Base.metadata-t.
+# Minden modul-saját modellt is importálni kell, hogy az autogenerate
+# az ő tábláit is észlelje.
+from app.modules.rendelo import models as rendelo_models  # noqa: F401
 from app.shared import models  # noqa: F401
 from app.shared.config import ensure_dirs, settings
 from app.shared.db import Base

@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
+from app.modules.rendelo.routes import views as rendelo_views
 from app.routes import auth, views
 from app.shared.config import ensure_dirs, settings
 from app.shared.db import init_db
@@ -43,4 +44,5 @@ async def _auth_redirect_handler(_request: Request, _exc: AuthRedirectError):
 
 
 app.include_router(auth.router)
+app.include_router(rendelo_views.router)
 app.include_router(views.router)

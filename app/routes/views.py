@@ -51,21 +51,6 @@ def jobs_placeholder(request: Request, user: User = Depends(current_user)) -> HT
     )
 
 
-@router.get("/rendelo", response_class=HTMLResponse)
-def rendelo_placeholder(request: Request, user: User = Depends(current_user)) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request,
-        "module_placeholder.html",
-        {
-            "user": user,
-            "title": "Rendelő",
-            "module_label": "Rendelő",
-            "module_phase": "Fázis 1 — migráció a meglévő nyomda_rendelo repóból",
-            **sidebar_context(user, active_module="rendelo"),
-        },
-    )
-
-
 @router.get("/stock", response_class=HTMLResponse)
 def stock_placeholder(request: Request, user: User = Depends(current_user)) -> HTMLResponse:
     return templates.TemplateResponse(
