@@ -114,38 +114,6 @@ def _placeholder_response(
     )
 
 
-@router.get("/jobs", response_class=HTMLResponse)
-def jobs_own(
-    request: Request,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    return _placeholder_response(
-        request,
-        user,
-        db,
-        title="Saját munkáim",
-        phase="Fázis 2 — még nincs implementálva",
-        active_key="jobs_own",
-    )
-
-
-@router.get("/jobs/new", response_class=HTMLResponse)
-def jobs_new(
-    request: Request,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    return _placeholder_response(
-        request,
-        user,
-        db,
-        title="Új munka",
-        phase="Fázis 2 — felvevő form, még nincs",
-        active_key="jobs_new",
-    )
-
-
 @router.get("/jobs/workshop", response_class=HTMLResponse)
 def jobs_workshop(
     request: Request,
@@ -207,22 +175,6 @@ def stock_placeholder(
         title="Készlet",
         phase="Fázis 6 — stock_items + min-stock figyelő",
         active_key="stock_list",
-    )
-
-
-@router.get("/customers", response_class=HTMLResponse)
-def customers_placeholder(
-    request: Request,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    return _placeholder_response(
-        request,
-        user,
-        db,
-        title="Ügyfelek",
-        phase="Fázis 2 — közös ügyféltábla CRUD",
-        active_key="data_customers",
     )
 
 

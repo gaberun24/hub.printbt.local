@@ -1,0 +1,72 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/customers/new" class="btn btn-accent">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Új ügyfél
+  </a>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Ügyfelek</h1>
+<div class="greeting-date">retail és reseller törzs</div>
+
+<div class="stock-toolbar" style="margin-top: 24px;">
+  <form method="get" action="/customers" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+    <input class="form-input" name="q" value="{{ q }}" placeholder="Keresés név / email / telefon"
+           style="width: 280px; padding: 6px 10px;">
+    <button type="submit" class="btn">Keresés</button>
+    <a href="/customers" class="filter-chip {% if not customer_type_filter %}active{% endif %}">Mind</a>
+    <a href="/customers?customer_type=retail" class="filter-chip {% if customer_type_filter == 'retail' %}active{% endif %}">Retail</a>
+    <a href="/customers?customer_type=reseller" class="filter-chip {% if customer_type_filter == 'reseller' %}active{% endif %}">Reseller</a>
+  </form>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">{{ customers|length }} ügyfél</div>
+  </div>
+  {% if not customers %}
+    <div class="panel-body" style="color: var(--ink-subtle);">
+      Nincs ilyen ügyfél. <a href="/customers/new" style="color: var(--accent); font-weight: 500;">Vegyél fel egyet</a>.
+    </div>
+  {% else %}
+    <div style="overflow-x: auto;">
+      <table style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: var(--surface-2); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted);">
+            <th style="text-align:left; padding: 10px 16px;">Név</th>
+            <th style="text-align:left; padding: 10px 16px;">Típus</th>
+            <th style="text-align:left; padding: 10px 16px;">Email</th>
+            <th style="text-align:left; padding: 10px 16px;">Telefon</th>
+            <th style="text-align:right; padding: 10px 16px;">Felvéve</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in customers %}
+            <tr style="border-bottom: 1px solid var(--border); cursor: pointer;"
+                onclick="window.location='/customers/{{ c.id }}'">
+              <td style="padding: 10px 16px;">
+                <div style="font-weight: 600;">{{ c.name }}</div>
+                {% if c.notes %}
+                  <div style="font-size: 11px; color: var(--ink-subtle); margin-top: 2px;">{{ c.notes[:80] }}{% if c.notes|length > 80 %}…{% endif %}</div>
+                {% endif %}
+              </td>
+              <td style="padding: 10px 16px;">
+                {% if c.customer_type == 'reseller' %}
+                  <span class="reseller-badge">B2B{% if c.discount_pct %} · −{{ c.discount_pct }}%{% endif %}</span>
+                {% else %}
+                  <span style="font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle); letter-spacing: 0.04em;">retail</span>
+                {% endif %}
+              </td>
+              <td style="padding: 10px 16px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted);">{{ c.email or "—" }}</td>
+              <td style="padding: 10px 16px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted);">{{ c.phone or "—" }}</td>
+              <td style="padding: 10px 16px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle); text-align: right;">{{ c.created_at|hu_date("short") }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

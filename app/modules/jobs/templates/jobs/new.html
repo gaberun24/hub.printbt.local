@@ -1,0 +1,146 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/jobs" class="btn">Mégsem</a>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Új <em>munka</em></h1>
+<div class="greeting-date">felvétel: ügyfél · határidő · taskok</div>
+
+{% if error %}
+  <div class="auth-error" role="alert" style="margin-top: 16px; max-width: 720px;">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="/jobs/new" style="max-width: 720px; margin-top: 24px;">
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Ügyfél</div>
+      <a href="/customers/new?next=/jobs/new" style="font-size: 12px; color: var(--accent); font-weight: 500;">+ Új ügyfél</a>
+    </div>
+    <div class="panel-body">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label class="form-label">Válassz ügyfelet</label>
+        <select class="form-input" name="customer_id" required>
+          <option value="">— válassz —</option>
+          {% for c in customers %}
+            <option value="{{ c.id }}" {% if prefill_customer and prefill_customer.id == c.id %}selected{% endif %}>
+              {{ c.name }}{% if c.customer_type == 'reseller' %} (B2B){% endif %}{% if c.email %} · {{ c.email }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Alap</div>
+    </div>
+    <div class="panel-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Határidő (dátum + óra)</label>
+          <input class="form-input" name="deadline" type="datetime-local" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Csatorna</label>
+          <select class="form-input" name="intake_channel">
+            {% for ic in intake_channels %}
+              <option value="{{ ic.value }}" {% if ic.value == 'personal' %}selected{% endif %}>
+                {% if ic.value == 'personal' %}Személyes
+                {% elif ic.value == 'email' %}Email
+                {% elif ic.value == 'workshop_dropoff' %}Műhelyben behozta
+                {% elif ic.value == 'phone' %}Telefon
+                {% else %}{{ ic.value }}
+                {% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <label class="form-checkbox">
+          <input type="checkbox" name="is_urgent">
+          ⚠ Sürgős (piros stempli az A4-en)
+        </label>
+        {% if user.is_designer %}
+          <label class="form-checkbox">
+            <input type="checkbox" name="pool">
+            Közös pool (különben magamhoz veszem)
+          </label>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Leírás</label>
+        <textarea class="form-textarea" name="description"
+                  placeholder="Pl. '50 db Gildan Heavy Cotton, fekete S/M/L vegyesen, mell-méret 28×20 cm, középre. DTF nyomás, vasalás 200°C 15s.'"></textarea>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Forrásfájl elérési út (opcionális)</label>
+          <input class="form-input" name="source_file_path"
+                 placeholder="\\storage\grafika\karoly\2026\pelikan\K7M2X9.cdr">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ár (info, Ft)</label>
+          <input class="form-input" name="price_huf" type="number" min="0" step="100"
+                 placeholder="Pl. 12500">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Taskok</div>
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
+        legalább 1 kell · üres sorokat átugorja
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="task-builder">
+        {% for i in range(5) %}
+          <div class="task-builder-row">
+            <select name="task_type">
+              <option value="">— task típus —</option>
+              {% for tt in task_types %}
+                <option value="{{ tt.value }}">
+                  {% if tt.value == 'uv_print' %}UV nyomtatás
+                  {% elif tt.value == 'co2_laser' %}CO2 lézer
+                  {% elif tt.value == 'fiber_laser' %}Fiber lézer
+                  {% elif tt.value == 'dtf_print' %}DTF nyomtatás
+                  {% elif tt.value == 'dtf_press' %}DTF vasalás
+                  {% elif tt.value == 'mug_press' %}Bögre press
+                  {% elif tt.value == 'engrave_manual' %}Gravír (kézi)
+                  {% elif tt.value == 'stamp' %}Bélyegző
+                  {% elif tt.value == 'business_card' %}Névjegy
+                  {% elif tt.value == 'sticker' %}Matrica
+                  {% elif tt.value == 'large_format' %}Nagyformátum
+                  {% else %}Egyéb
+                  {% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            <input name="task_instructions" placeholder="Utasítás (hőfok, idő, méret stb.)">
+            <input name="task_quantity" class="qty" type="number" min="1" placeholder="db">
+            <span style="color: var(--ink-subtle); font-family: var(--font-mono); font-size:10px; text-align:center;">#{{ i + 1 }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <button type="submit" class="btn btn-accent">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Munka mentése
+    </button>
+    <a href="/jobs" class="btn btn-ghost">Mégsem</a>
+  </div>
+</form>
+{% endblock %}

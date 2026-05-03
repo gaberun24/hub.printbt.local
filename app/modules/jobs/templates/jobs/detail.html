@@ -1,0 +1,158 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/jobs" class="btn">Vissza a listához</a>
+{% endblock %}
+
+{% block main %}
+<div class="job-detail">
+
+  <div class="job-detail-main">
+    <div class="job-hero {% if job.is_urgent %}urgent{% endif %}">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+        <div>
+          <div class="job-hero-id">{{ job.public_id[:3] }}-{{ job.public_id[3:] }}</div>
+          <div class="job-hero-meta">
+            <span class="status-pill {{ job.status|string|status_hu_class }}">{{ job.status|string|status_hu }}</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
+              felvette: {{ job.intake_user.name.split()[0] }} ·
+              {% if job.intake_channel == 'email' %}email
+              {% elif job.intake_channel == 'workshop_dropoff' %}műhely-behozta
+              {% elif job.intake_channel == 'phone' %}telefon
+              {% else %}személyes
+              {% endif %}
+              · {{ job.created_at|hu_date("time") }}
+            </span>
+          </div>
+          <div class="job-hero-customer">
+            <a href="/customers/{{ job.customer.id }}" style="color: inherit;">{{ job.customer.name }}</a>
+            {% if job.customer.customer_type == 'reseller' %}
+              <span class="reseller-badge" style="font-size:10px; vertical-align: middle;">B2B{% if job.customer.discount_pct %} · −{{ job.customer.discount_pct }}%{% endif %}</span>
+            {% endif %}
+          </div>
+          {% if job.description %}
+            <div class="job-hero-desc">{{ job.description }}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Részletek</div>
+      </div>
+      <div class="panel-body" style="padding: 0 16px;">
+        <div class="detail-row">
+          <div class="detail-label">Határidő</div>
+          <div class="detail-value {% if job.is_urgent %}deadline-big{% endif %}">
+            {% if job.is_urgent %}⚠ {% endif %}{{ job.deadline|hu_date("time") }}
+          </div>
+        </div>
+        {% if job.price_huf %}
+          <div class="detail-row">
+            <div class="detail-label">Ár (info)</div>
+            <div class="detail-value mono">{{ "{:,}".format(job.price_huf).replace(",", " ") }} Ft</div>
+          </div>
+        {% endif %}
+        {% if job.assigned_designer %}
+          <div class="detail-row">
+            <div class="detail-label">Grafikus</div>
+            <div class="detail-value">{{ job.assigned_designer.name }}</div>
+          </div>
+        {% else %}
+          <div class="detail-row">
+            <div class="detail-label">Grafikus</div>
+            <div class="detail-value" style="color: var(--ink-subtle);">— közös pool</div>
+          </div>
+        {% endif %}
+        {% if job.source_file_path %}
+          <div class="detail-row">
+            <div class="detail-label">Forrás</div>
+            <div class="detail-value mono" style="font-size: 11px; word-break: break-all;">{{ job.source_file_path }}</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Taskok</div>
+        {% set done_count = job.tasks|selectattr("status", "equalto", "done")|list|length %}
+        <div style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
+          {{ done_count }}/{{ job.tasks|length }} kész
+        </div>
+      </div>
+      {% for task in job.tasks %}
+        <div class="task-row">
+          <div class="task-checkbox {% if task.status == 'done' %}checked{% elif task.status == 'in_progress' %}active{% endif %}"></div>
+          <div class="task-info">
+            <div class="task-type">
+              {% if task.task_type == 'uv_print' %}UV nyomtatás
+              {% elif task.task_type == 'co2_laser' %}CO2 lézer
+              {% elif task.task_type == 'fiber_laser' %}Fiber lézer
+              {% elif task.task_type == 'dtf_print' %}DTF nyomtatás
+              {% elif task.task_type == 'dtf_press' %}DTF vasalás
+              {% elif task.task_type == 'mug_press' %}Bögre press
+              {% elif task.task_type == 'engrave_manual' %}Gravír (kézi)
+              {% elif task.task_type == 'stamp' %}Bélyegző
+              {% elif task.task_type == 'business_card' %}Névjegy
+              {% elif task.task_type == 'sticker' %}Matrica
+              {% elif task.task_type == 'large_format' %}Nagyformátum
+              {% else %}Egyéb
+              {% endif %}
+              · {{ task.quantity }} db
+            </div>
+            <div class="task-text">{{ task.instructions or "(nincs utasítás)" }}</div>
+          </div>
+          <div class="task-meta">
+            {% if task.assigned_to %}{{ task.assigned_to.name.split()[0] }}{% else %}függő{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="action-bar">
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
+        Az állapot-átléptetés és kommentek a 2.3 fázisban jönnek.
+      </span>
+    </div>
+  </div>
+
+  <div class="job-detail-side">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Idővonal</div>
+      </div>
+      <div class="timeline" style="padding: 8px 16px 16px;">
+        <div class="timeline-item current">
+          <div>
+            <div class="timeline-status">{{ job.status|string|status_hu }}</div>
+            <div class="timeline-meta">{{ job.created_at|hu_date("rel") }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if job.attachments %}
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Csatolmányok</div>
+        </div>
+        <div class="panel-body">
+          <div class="attachments">
+            {% for a in job.attachments %}
+              <div class="attachment-chip">
+                <div class="file-icon">{{ a.filename.rsplit(".", 1)[-1][:3]|upper }}</div>
+                <div class="file-info">
+                  <div class="file-name">{{ a.filename }}</div>
+                  <div class="file-size">{{ a.kind }}</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

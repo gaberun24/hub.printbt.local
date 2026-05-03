@@ -1,0 +1,141 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/jobs/new?customer_id={{ customer.id }}" class="btn btn-accent">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Új munka
+  </a>
+{% endblock %}
+
+{% block main %}
+<div class="job-hero">
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+    <div>
+      <div style="font-family: var(--font-mono); font-size:11px; color: var(--ink-subtle); letter-spacing:0.05em; margin-bottom: 4px;">
+        ÜGYFÉL · #{{ customer.id }}
+      </div>
+      <div style="font-family: var(--font-display); font-weight:600; font-size:28px; letter-spacing:-0.01em;">
+        {{ customer.name }}
+        {% if customer.customer_type == 'reseller' %}
+          <span class="reseller-badge" style="font-size:11px; vertical-align: middle; margin-left: 6px;">B2B{% if customer.discount_pct %} · −{{ customer.discount_pct }}%{% endif %}</span>
+        {% endif %}
+      </div>
+      {% if customer.notes %}
+        <div style="font-family: var(--font-display); font-style: italic; font-size: 14px; color: var(--ink-muted); margin-top: 8px;">
+          {{ customer.notes }}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="job-detail" style="grid-template-columns: 1fr 320px;">
+  <div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Adatok módosítása</div>
+      </div>
+      <div class="panel-body">
+        <form method="post" action="/customers/{{ customer.id }}/update">
+          <div class="form-group">
+            <label class="form-label">Név</label>
+            <input class="form-input" name="name" value="{{ customer.name }}" required>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input class="form-input" name="email" type="email" value="{{ customer.email or '' }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Telefon</label>
+              <input class="form-input" name="phone" value="{{ customer.phone or '' }}">
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Típus</label>
+              <select class="form-input" name="customer_type" id="customer_type">
+                <option value="retail" {% if customer.customer_type == 'retail' %}selected{% endif %}>Retail (lakossági)</option>
+                <option value="reseller" {% if customer.customer_type == 'reseller' %}selected{% endif %}>Reseller (B2B)</option>
+              </select>
+            </div>
+            <div class="form-group" id="discount-field"
+                 {% if customer.customer_type != 'reseller' %}style="display:none"{% endif %}>
+              <label class="form-label">Reseller kedvezmény (%)</label>
+              <input class="form-input" name="discount_pct" type="number" min="0" max="50"
+                     value="{{ customer.discount_pct if customer.discount_pct else '' }}">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Belső megjegyzés</label>
+            <textarea class="form-textarea" name="notes">{{ customer.notes or '' }}</textarea>
+          </div>
+
+          <div class="action-bar">
+            <button type="submit" class="btn btn-accent">Mentés</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Kontakt</div>
+      </div>
+      <div class="panel-body" style="font-family: var(--font-mono); font-size: 12px; line-height: 1.7;">
+        {% if customer.email %}<div>{{ customer.email }}</div>{% endif %}
+        {% if customer.phone %}<div>{{ customer.phone }}</div>{% endif %}
+        {% if not customer.email and not customer.phone %}
+          <span style="color: var(--ink-subtle);">Nincs megadva.</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Munkák</div>
+        <div style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">{{ customer_jobs|length }} db</div>
+      </div>
+      {% if not customer_jobs %}
+        <div class="panel-body" style="color: var(--ink-subtle); font-size: 13px;">
+          Még nincs munka ehhez az ügyfélhez.
+        </div>
+      {% else %}
+        <div style="padding: 0;">
+          {% for j in customer_jobs[:10] %}
+            <a href="/jobs/{{ j.public_id }}"
+               style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); text-decoration: none; color: inherit;">
+              <div>
+                <div style="font-family: var(--font-mono); font-weight: 700; font-size: 13px;">{{ j.public_id[:3] }}-{{ j.public_id[3:] }}</div>
+                <div style="font-size: 11px; color: var(--ink-subtle); margin-top: 2px;">{{ j.created_at|hu_date("short") }}</div>
+              </div>
+              <span class="status-pill {{ j.status|string|status_hu_class }}">{{ j.status|string|status_hu }}</span>
+            </a>
+          {% endfor %}
+          {% if customer_jobs|length > 10 %}
+            <div style="padding: 8px 16px; font-size: 11px; color: var(--ink-subtle); text-align: center;">
+              + {{ customer_jobs|length - 10 }} további
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var sel = document.getElementById('customer_type');
+    var field = document.getElementById('discount-field');
+    if (!sel || !field) return;
+    sel.addEventListener('change', function () {
+      field.style.display = sel.value === 'reseller' ? '' : 'none';
+    });
+  })();
+</script>
+{% endblock %}

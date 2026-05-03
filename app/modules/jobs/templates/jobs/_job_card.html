@@ -1,0 +1,28 @@
+{# A job-card a /jobs lista és a customer-detail oldalon. `j` = Job példány. #}
+<a href="/jobs/{{ j.public_id }}" class="job-card {% if j.is_urgent %}urgent{% endif %}" style="text-decoration: none; color: inherit;">
+  {% if j.is_urgent %}<div class="urgency-flag">SÜRGŐS</div>{% endif %}
+  <div class="job-id">{{ j.public_id[:3] }}-{{ j.public_id[3:] }}</div>
+  <div class="job-body">
+    <div class="job-customer">
+      {{ j.customer.name }}
+      {% if j.customer.customer_type == 'reseller' %}
+        <span class="reseller-badge">B2B</span>
+      {% endif %}
+    </div>
+    <div class="job-desc">{{ j.description or "(nincs leírás)" }}</div>
+    <div class="job-meta">
+      <span class="status-pill {{ j.status|string|status_hu_class }}">{{ j.status|string|status_hu }}</span>
+      <span class="job-deadline {% if j.is_urgent %}urgent{% endif %}">
+        {% if j.is_urgent %}⚠ {% endif %}{{ j.deadline|hu_date("time") }}
+      </span>
+      {% if j.tasks %}
+        <div class="task-chips">
+          {% for t in j.tasks[:4] %}
+            <span class="task-chip {% if t.status == 'done' %}done{% elif t.status == 'in_progress' %}active{% endif %}">{{ t.task_type[:3]|upper }}</span>
+          {% endfor %}
+          {% if j.tasks|length > 4 %}<span class="task-chip">+{{ j.tasks|length - 4 }}</span>{% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</a>

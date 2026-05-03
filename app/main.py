@@ -13,9 +13,10 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
+from app.modules.jobs.routes import views as jobs_views
 from app.modules.rendelo.routes import admin as rendelo_admin
 from app.modules.rendelo.routes import views as rendelo_views
-from app.routes import admin, auth, views
+from app.routes import admin, auth, customers, views
 from app.shared.config import ensure_dirs, settings
 from app.shared.db import init_db
 from app.shared.dependencies import AuthRedirectError, auth_redirect_response
@@ -45,11 +46,16 @@ async def _auth_redirect_handler(_request: Request, _exc: AuthRedirectError):
 
 
 app.include_router(auth.router)
-# Admin route-ok ELŐBB legyenek, mint a `/{request_id}` dynamikus path
-# a `rendelo_views`-ban — különben pl. `/admin/rendelo/categories` `/{request_id}`
-# alá esne és 404-et adna. A `rendelo_admin.router` saját prefixe `/admin/rendelo`,
-# tehát nem ütközik, de az `admin.router` (`/admin`) sem.
+# Admin route-ok ELŐBB legyenek, mint a `/{id}` dynamikus path-jaik —
+# különben pl. `/admin/rendelo/categories` `/{request_id}` alá esne 404-gyel.
 app.include_router(admin.router)
 app.include_router(rendelo_admin.router)
 app.include_router(rendelo_views.router)
+# Customers (globális) és Munkák modul (statikus /jobs/new ELŐBB,
+# dinamikus /jobs/{public_id} a routerön belül utána).
+app.include_router(customers.router)
+app.include_router(jobs_views.router)
+# Globális views legutoljára — a placeholder /jobs/* route-okat (workshop,
+# inbox, quotes) itt regisztráljuk, a /jobs és /jobs/new már a jobs_views
+# routerével le van foglalva.
 app.include_router(views.router)
