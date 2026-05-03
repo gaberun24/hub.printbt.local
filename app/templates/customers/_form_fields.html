@@ -1,0 +1,91 @@
+{# Közös form-mezők a customer/new + customer/detail sablonokhoz.
+   Bekonvertálja a jogi forma + ügyfél típusa toggle-okat, a feltételes
+   adószám és kedvezmény mezőket.
+
+   `customer` lehet None (új ügyfél) vagy egy Customer példány.
+#}
+
+<div class="form-group">
+  <label class="form-label">Név</label>
+  <input class="form-input" name="name" value="{{ customer.name if customer else '' }}" required
+         placeholder="Pl. Pelikán Kft. vagy Tóth Anikó">
+</div>
+
+<div class="form-grid">
+  <div class="form-group">
+    <label class="form-label">Email</label>
+    <input class="form-input" name="email" type="email" value="{{ customer.email if customer else '' }}"
+           placeholder="info@pelikan.hu">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Telefon</label>
+    <input class="form-input" name="phone" value="{{ customer.phone if customer else '' }}"
+           placeholder="+36 70 123 4567">
+  </div>
+</div>
+
+<div class="form-grid">
+  <div class="form-group">
+    <label class="form-label">Jogi forma</label>
+    <select class="form-input" name="legal_type" id="legal_type">
+      <option value="individual" {% if not customer or customer.legal_type == 'individual' %}selected{% endif %}>Magánszemély</option>
+      <option value="company" {% if customer and customer.legal_type == 'company' %}selected{% endif %}>Cég</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Ügyfél típusa</label>
+    <select class="form-input" name="customer_type" id="customer_type">
+      <option value="retail" {% if not customer or customer.customer_type == 'retail' %}selected{% endif %}>Vásárló</option>
+      <option value="reseller" {% if customer and customer.customer_type == 'reseller' %}selected{% endif %}>Viszonteladó</option>
+    </select>
+  </div>
+</div>
+
+<div class="form-grid">
+  <div class="form-group" id="tax-field"
+       {% if not customer or customer.legal_type != 'company' %}style="display:none"{% endif %}>
+    <label class="form-label">Adószám (HU)</label>
+    <input class="form-input" name="tax_number" id="tax-number-input"
+           value="{{ customer.tax_number if customer and customer.tax_number else '' }}"
+           pattern="\d{8}-\d-\d{2}" maxlength="13"
+           placeholder="12345678-1-23">
+  </div>
+  <div class="form-group" id="discount-field"
+       {% if not customer or customer.customer_type != 'reseller' %}style="display:none"{% endif %}>
+    <label class="form-label">Viszonteladói kedvezmény (%)</label>
+    <input class="form-input" name="discount_pct" type="number" min="0" max="50"
+           value="{{ customer.discount_pct if customer and customer.discount_pct else '' }}"
+           placeholder="Pl. 15">
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="form-label">Belső megjegyzés (opcionális)</label>
+  <textarea class="form-textarea" name="notes"
+            placeholder="Pl. 'régi ügyfél, mindig sürgős' vagy 'pénztár, csak előre fizet'">{{ customer.notes if customer else '' }}</textarea>
+</div>
+
+<script>
+  // Conditional field-show: adószám csak cégeknek, kedvezmény csak viszonteladóknak.
+  (function () {
+    var legalSel = document.getElementById('legal_type');
+    var typeSel  = document.getElementById('customer_type');
+    var taxField = document.getElementById('tax-field');
+    var taxInput = document.getElementById('tax-number-input');
+    var discField = document.getElementById('discount-field');
+    if (!legalSel || !typeSel) return;
+
+    function refresh() {
+      var isCompany = legalSel.value === 'company';
+      var isReseller = typeSel.value === 'reseller';
+      taxField.style.display = isCompany ? '' : 'none';
+      // HTML5-validáció: cégnél kötelező legyen
+      if (taxInput) taxInput.required = isCompany;
+      discField.style.display = isReseller ? '' : 'none';
+    }
+
+    legalSel.addEventListener('change', refresh);
+    typeSel.addEventListener('change', refresh);
+    refresh();
+  })();
+</script>

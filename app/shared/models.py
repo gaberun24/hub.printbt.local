@@ -42,8 +42,17 @@ ROLE_FLAGS: tuple[str, ...] = (
 
 
 class CustomerType(StrEnum):
-    RETAIL = "retail"
-    RESELLER = "reseller"
+    """Vásárló (regular) vagy viszonteladó (kedvezménnyel rendel)."""
+
+    RETAIL = "retail"  # vásárló
+    RESELLER = "reseller"  # viszonteladó
+
+
+class LegalType(StrEnum):
+    """Magánszemély vagy cég. Cégeknek adószám is kell."""
+
+    INDIVIDUAL = "individual"  # magánszemély
+    COMPANY = "company"  # cég
 
 
 class AuditEntityType(StrEnum):
@@ -154,7 +163,12 @@ class UserSession(Base):
 
 class Customer(Base):
     """Közös ügyféltábla — a Munkák modul tölti tartalommal, de a séma
-    közös, mert a későbbi printbt.hu redesign is innen olvasna."""
+    közös, mert a későbbi printbt.hu redesign is innen olvasna.
+
+    Két ortogonális dimenzió:
+    - `legal_type`: magánszemély vs cég (cégeknek `tax_number` kötelező a UI-on)
+    - `customer_type`: vásárló vs viszonteladó (utóbbi kap kedvezményt)
+    """
 
     __tablename__ = "customers"
 
@@ -162,6 +176,13 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str | None] = mapped_column(String(190), index=True, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    legal_type: Mapped[LegalType] = mapped_column(
+        String(20), nullable=False, default=LegalType.INDIVIDUAL
+    )
+    # Adószám (HU `12345678-1-23` formátum). Magánszemélynél NULL,
+    # cégnél a form-szinten kötelező — DB-szinten nullable, hogy a
+    # migráció ne törjön el meglévő rekordokat.
+    tax_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     customer_type: Mapped[CustomerType] = mapped_column(
         String(20), nullable=False, default=CustomerType.RETAIL
     )

@@ -26,7 +26,7 @@
           <option value="">— válassz —</option>
           {% for c in customers %}
             <option value="{{ c.id }}" {% if prefill_customer and prefill_customer.id == c.id %}selected{% endif %}>
-              {{ c.name }}{% if c.customer_type == 'reseller' %} (B2B){% endif %}{% if c.email %} · {{ c.email }}{% endif %}
+              {{ c.name }}{% if c.customer_type == 'reseller' %} (VTL){% endif %}{% if c.email %} · {{ c.email }}{% endif %}
             </option>
           {% endfor %}
         </select>

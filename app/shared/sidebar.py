@@ -130,7 +130,7 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
         items=(
             NavItem(
                 key="stock_list",
-                label="Itemek",
+                label="Termékek",
                 href="/stock",
                 icon=_ICON_BOX,
                 visible=lambda u: u.is_admin or u.is_workshop or u.is_orderer,

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.shared.db import get_db
 from app.shared.dependencies import current_user
-from app.shared.models import Customer, CustomerType, User
+from app.shared.models import Customer, CustomerType, LegalType, User
 from app.shared.sidebar import sidebar_context
 from app.shared.templates import templates
 
@@ -59,7 +59,7 @@ def customers_list(
             "user": user,
             "title": "Ügyfelek",
             "topbar_title": "Ügyfelek",
-            "topbar_subtitle": "retail és reseller törzs",
+            "topbar_subtitle": "vásárlók és viszonteladók törzse",
             "customers": customers,
             "q": q or "",
             "customer_type_filter": customer_type,
@@ -100,6 +100,8 @@ def customers_new_submit(
     name: str = Form(...),
     email: str | None = Form(None),
     phone: str | None = Form(None),
+    legal_type: str = Form("individual"),
+    tax_number: str | None = Form(None),
     customer_type: str = Form("retail"),
     discount_pct: int | None = Form(None),
     notes: str | None = Form(None),
@@ -113,11 +115,21 @@ def customers_new_submit(
             url="/customers/new?error=A+n%C3%A9v+k%C3%B6telez%C5%91", status_code=303
         )
 
+    lt = LegalType.COMPANY if legal_type == "company" else LegalType.INDIVIDUAL
     ct = CustomerType.RESELLER if customer_type == "reseller" else CustomerType.RETAIL
+
+    if lt == LegalType.COMPANY and not (tax_number or "").strip():
+        return RedirectResponse(
+            url="/customers/new?error=C%C3%A9geknek+ad%C3%B3sz%C3%A1m+k%C3%B6telez%C5%91",
+            status_code=303,
+        )
+
     customer = Customer(
         name=name,
         email=(email or "").strip().lower() or None,
         phone=(phone or "").strip() or None,
+        legal_type=lt,
+        tax_number=(tax_number or "").strip() or None if lt == LegalType.COMPANY else None,
         customer_type=ct,
         discount_pct=discount_pct if ct == CustomerType.RESELLER else None,
         notes=(notes or "").strip() or None,
@@ -185,6 +197,8 @@ def customers_update(
     name: str = Form(...),
     email: str | None = Form(None),
     phone: str | None = Form(None),
+    legal_type: str = Form("individual"),
+    tax_number: str | None = Form(None),
     customer_type: str = Form("retail"),
     discount_pct: int | None = Form(None),
     notes: str | None = Form(None),
@@ -199,10 +213,17 @@ def customers_update(
     if not name:
         raise HTTPException(400, "A név kötelező.")
 
+    lt = LegalType.COMPANY if legal_type == "company" else LegalType.INDIVIDUAL
     ct = CustomerType.RESELLER if customer_type == "reseller" else CustomerType.RETAIL
+
+    if lt == LegalType.COMPANY and not (tax_number or "").strip():
+        raise HTTPException(400, "Cégeknek adószám kötelező.")
+
     customer.name = name
     customer.email = (email or "").strip().lower() or None
     customer.phone = (phone or "").strip() or None
+    customer.legal_type = lt
+    customer.tax_number = (tax_number or "").strip() or None if lt == LegalType.COMPANY else None
     customer.customer_type = ct
     customer.discount_pct = discount_pct if ct == CustomerType.RESELLER else None
     customer.notes = (notes or "").strip() or None
