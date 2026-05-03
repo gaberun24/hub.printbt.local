@@ -19,12 +19,20 @@ from sqlalchemy.orm import Session, selectinload
 from app.modules.jobs.models import (
     IntakeChannel,
     Job,
+    JobEvent,
+    JobEventAction,
     JobStatus,
     JobTask,
     JobType,
+    TaskStatus,
     TaskType,
 )
 from app.modules.jobs.public_id import generate_unique, normalize
+from app.modules.jobs.services import (
+    can_transition,
+    mark_job_delivered,
+    recompute_job_status,
+)
 from app.shared.db import get_db
 from app.shared.dependencies import current_user
 from app.shared.models import (
@@ -32,6 +40,7 @@ from app.shared.models import (
     AuditLog,
     Customer,
     User,
+    utcnow,
 )
 from app.shared.sidebar import sidebar_context
 from app.shared.templates import templates
@@ -50,21 +59,6 @@ _ACTIVE_STATUSES = (
     JobStatus.MUHELYBEN,
     JobStatus.KESZ,
 )
-
-
-def _audit_job(
-    db: Session, user_id: int, job_id: int, action: str, *, old: str = "", new: str = ""
-) -> None:
-    db.add(
-        AuditLog(
-            entity_type=AuditEntityType.JOB,
-            entity_id=job_id,
-            action=action,
-            old_value=old,
-            new_value=new,
-            user_id=user_id,
-        )
-    )
 
 
 def _group_by_status(jobs: list[Job]) -> dict[str, list[Job]]:
@@ -288,8 +282,8 @@ def jobs_new_submit(
 
     _audit_job(
         db,
-        user.id,
-        job.id,
+        user,
+        job,
         "create",
         new=json.dumps(
             {
@@ -301,12 +295,58 @@ def jobs_new_submit(
             ensure_ascii=False,
         ),
     )
+    # CREATED Event a timeline-ra is
+    _log_event(
+        db,
+        job,
+        user,
+        JobEventAction.CREATED,
+        {"task_count": len(cleaned_tasks), "job_type": str(job.job_type)},
+    )
     db.commit()
 
     return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
 
 
 # ───────────────────────── detail (minimal) ─────────────────────────
+
+
+def _load_job_or_404(db: Session, public_id: str) -> Job:
+    norm = normalize(public_id)
+    if not norm:
+        raise HTTPException(404, "Job nem található.")
+    job = db.execute(
+        select(Job)
+        .options(
+            selectinload(Job.customer),
+            selectinload(Job.tasks).selectinload(JobTask.assigned_to),
+            selectinload(Job.intake_user),
+            selectinload(Job.assigned_designer),
+            selectinload(Job.attachments),
+            selectinload(Job.events).selectinload(JobEvent.user),
+        )
+        .where(Job.public_id == norm)
+    ).scalar_one_or_none()
+    if job is None:
+        raise HTTPException(404, "Job nem található.")
+    return job
+
+
+def _log_event(
+    db: Session,
+    job: Job,
+    user: User,
+    action: JobEventAction,
+    payload: dict | None = None,
+) -> None:
+    db.add(
+        JobEvent(
+            job_id=job.id,
+            user_id=user.id,
+            action=action,
+            payload_json=json.dumps(payload, ensure_ascii=False) if payload else None,
+        )
+    )
 
 
 @router.get("/{public_id}", response_class=HTMLResponse)
@@ -316,26 +356,28 @@ def jobs_detail(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
-    """Minimális detail. A teljes mockup-faithful nézet a 2.3-ban jön."""
+    """Teljes Job-detail: hero + részletek + taskok + akciók + komment-stream."""
+    job = _load_job_or_404(db, public_id)
 
-    norm = normalize(public_id)
-    if not norm:
-        raise HTTPException(404, "Job nem található.")
-
-    job = db.execute(
-        select(Job)
-        .options(
-            selectinload(Job.customer),
-            selectinload(Job.tasks).selectinload(JobTask.assigned_to),
-            selectinload(Job.intake_user),
-            selectinload(Job.assigned_designer),
-            selectinload(Job.attachments),
+    # Designer-reassignment dropdown opciói
+    designers = (
+        db.execute(
+            select(User)
+            .where(User.is_designer.is_(True), User.active.is_(True))
+            .order_by(User.name)
         )
-        .where(Job.public_id == norm)
-    ).scalar_one_or_none()
+        .scalars()
+        .all()
+    )
 
-    if job is None:
-        raise HTTPException(404, "Job nem található.")
+    # Engedélyezett state-átmenetek a jelenlegi státuszból
+    next_states = sorted(
+        s.value
+        for s in JobStatus
+        if can_transition(job.status, s)
+        # az automatikus `kesz` és a terminal `atadva` nem manuális akcióra megy
+        and s not in (JobStatus.KESZ,)
+    )
 
     return templates.TemplateResponse(
         request,
@@ -346,6 +388,225 @@ def jobs_detail(
             "topbar_title": f"{job.public_id[:3]}-{job.public_id[3:]}",
             "topbar_subtitle": job.customer.name,
             "job": job,
+            "designers": designers,
+            "next_states": next_states,
             **sidebar_context(db, user, active_key="jobs_own"),
         },
     )
+
+
+# ───────────────────────── task actions ─────────────────────────
+
+
+def _get_task(job: Job, task_id: int) -> JobTask:
+    for t in job.tasks:
+        if t.id == task_id:
+            return t
+    raise HTTPException(404, "Task nem található ehhez a Job-hoz.")
+
+
+def _audit_job(
+    db: Session, user: User, job: Job, action: str, *, old: str = "", new: str = ""
+) -> None:
+    db.add(
+        AuditLog(
+            entity_type=AuditEntityType.JOB,
+            entity_id=job.id,
+            action=action,
+            old_value=old,
+            new_value=new,
+            user_id=user.id,
+        )
+    )
+
+
+@router.post("/{public_id}/tasks/{task_id}/claim")
+def task_claim(
+    public_id: str,
+    task_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    job = _load_job_or_404(db, public_id)
+    task = _get_task(job, task_id)
+    task.assigned_to_user_id = user.id
+    if task.status == TaskStatus.PENDING:
+        task.status = TaskStatus.IN_PROGRESS
+    _log_event(
+        db,
+        job,
+        user,
+        JobEventAction.TASK_CLAIMED,
+        {"task_id": task.id, "task_type": str(task.task_type)},
+    )
+    new_status = recompute_job_status(job)
+    if new_status:
+        _log_event(
+            db,
+            job,
+            user,
+            JobEventAction.STATUS_CHANGE,
+            {"from": "felvett", "to": str(new_status), "auto": True},
+        )
+        _audit_job(db, user, job, "status_change", old="felvett", new=str(new_status))
+    db.commit()
+    return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+
+
+@router.post("/{public_id}/tasks/{task_id}/done")
+def task_done(
+    public_id: str,
+    task_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    job = _load_job_or_404(db, public_id)
+    task = _get_task(job, task_id)
+    task.status = TaskStatus.DONE
+    if task.completed_at is None:
+        task.completed_at = utcnow()
+    if task.assigned_to_user_id is None:
+        # Aki done-ra teszi, az legyen rögzítve a felelős
+        task.assigned_to_user_id = user.id
+    _log_event(
+        db,
+        job,
+        user,
+        JobEventAction.TASK_DONE,
+        {"task_id": task.id, "task_type": str(task.task_type)},
+    )
+    old_status = str(job.status)
+    new_status = recompute_job_status(job)
+    if new_status:
+        _log_event(
+            db,
+            job,
+            user,
+            JobEventAction.STATUS_CHANGE,
+            {"from": old_status, "to": str(new_status), "auto": True},
+        )
+        _audit_job(db, user, job, "status_change", old=old_status, new=str(new_status))
+    db.commit()
+    return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+
+
+@router.post("/{public_id}/tasks/{task_id}/release")
+def task_release(
+    public_id: str,
+    task_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    job = _load_job_or_404(db, public_id)
+    task = _get_task(job, task_id)
+    task.assigned_to_user_id = None
+    if task.status == TaskStatus.IN_PROGRESS:
+        task.status = TaskStatus.PENDING
+    _log_event(
+        db,
+        job,
+        user,
+        JobEventAction.TASK_RELEASED,
+        {"task_id": task.id, "task_type": str(task.task_type)},
+    )
+    db.commit()
+    return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+
+
+# ───────────────────────── job state ─────────────────────────
+
+
+@router.post("/{public_id}/state")
+def jobs_change_state(
+    public_id: str,
+    next_status: str = Form(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    job = _load_job_or_404(db, public_id)
+    try:
+        target = JobStatus(next_status)
+    except ValueError:
+        raise HTTPException(400, f"Ismeretlen státusz: {next_status}") from None
+
+    if not can_transition(job.status, target):
+        raise HTTPException(409, f"Tiltott átmenet: {job.status} → {target}")
+
+    old_status = str(job.status)
+    if target == JobStatus.ATADVA:
+        mark_job_delivered(job)
+    else:
+        job.status = target
+
+    _log_event(
+        db,
+        job,
+        user,
+        JobEventAction.STATUS_CHANGE,
+        {"from": old_status, "to": str(target)},
+    )
+    _audit_job(db, user, job, "status_change", old=old_status, new=str(target))
+    db.commit()
+    return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+
+
+# ───────────────────────── designer reassignment ─────────────────────────
+
+
+@router.post("/{public_id}/assign-designer")
+def jobs_assign_designer(
+    public_id: str,
+    designer_id: str = Form(""),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    job = _load_job_or_404(db, public_id)
+    old = job.assigned_designer_id
+    new_id: int | None
+    if not designer_id or designer_id == "pool":
+        new_id = None
+    else:
+        try:
+            new_id = int(designer_id)
+        except ValueError:
+            raise HTTPException(400, "Hibás designer-azonosító.") from None
+        if not db.execute(
+            select(User).where(User.id == new_id, User.is_designer.is_(True))
+        ).scalar_one_or_none():
+            raise HTTPException(400, "Csak aktív designer rendelhető hozzá.")
+
+    if old == new_id:
+        return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+
+    job.assigned_designer_id = new_id
+    _log_event(
+        db,
+        job,
+        user,
+        JobEventAction.DESIGNER_ASSIGNED,
+        {"from_id": old, "to_id": new_id},
+    )
+    _audit_job(
+        db, user, job, "designer_assigned", old=str(old or "pool"), new=str(new_id or "pool")
+    )
+    db.commit()
+    return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+
+
+# ───────────────────────── comment ─────────────────────────
+
+
+@router.post("/{public_id}/comment")
+def jobs_comment(
+    public_id: str,
+    body: str = Form(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    job = _load_job_or_404(db, public_id)
+    body = (body or "").strip()
+    if not body:
+        return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+    _log_event(db, job, user, JobEventAction.COMMENTED, {"body": body})
+    db.commit()
+    return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)

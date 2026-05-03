@@ -65,15 +65,16 @@ def can_transition(current: JobStatus | str, target: JobStatus | str) -> bool:
 def recompute_job_status(job: Job) -> JobStatus | None:
     """A task-ok állapota alapján számolja vissza a Job státuszt.
 
-    Visszaadja az új státuszt, ha a Job-on változtatott. None ha nincs
-    változás. **Mellékhatás:** beállítja `job.status`-t és `job.closed_at`-ot
-    ha kell. A `commit`-ot a hívó intézi.
+    Csak két automatikus átmenetet vezérel — a többit a felhasználó
+    explicit lépteti az action-bar-ról:
 
-    Szabályok:
-    - Ha minden task `done` és a Job `muhelyben`-ben volt → `kesz`
-    - Ha legalább egy task `in_progress` és a Job NEM `muhelyben` →
-      `muhelyben`
-    - Egyébként semmi változás (a státuszt explicit átléptetés vezérli)
+    - `felvett → grafikan`: amint az első task `in_progress`-be lép
+      (= valaki magához vette és dolgozni kezdett rajta).
+    - `* → kesz`: amint minden task `done`. Kivéve ha már `kesz`,
+      `atadva` vagy `visszahivva` (ezekből nem visszafelé).
+
+    Visszaadja az új státuszt, ha változott; None ha nincs változás.
+    A `commit`-ot a hívó intézi.
     """
     if not job.tasks:
         return None
@@ -81,17 +82,17 @@ def recompute_job_status(job: Job) -> JobStatus | None:
     all_done = all(t.status == TaskStatus.DONE for t in job.tasks)
     any_in_progress = any(t.status == TaskStatus.IN_PROGRESS for t in job.tasks)
 
-    if all_done and job.status == JobStatus.MUHELYBEN:
+    if all_done and job.status not in (
+        JobStatus.KESZ,
+        JobStatus.ATADVA,
+        JobStatus.VISSZAHIVVA,
+    ):
         job.status = JobStatus.KESZ
         return JobStatus.KESZ
 
-    if any_in_progress and job.status not in (
-        JobStatus.MUHELYBEN,
-        JobStatus.KESZ,
-        JobStatus.ATADVA,
-    ):
-        job.status = JobStatus.MUHELYBEN
-        return JobStatus.MUHELYBEN
+    if any_in_progress and job.status == JobStatus.FELVETT:
+        job.status = JobStatus.GRAFIKAN
+        return JobStatus.GRAFIKAN
 
     return None
 

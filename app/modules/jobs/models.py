@@ -94,6 +94,20 @@ class AttachmentKind(StrEnum):
     PREVIEW = "preview"
 
 
+class JobEventAction(StrEnum):
+    """Egy Job idővonal-eseménye. A `payload_json` mező részleteket tárol
+    a state-change-ek és a kommentek számára (lásd `JobEvent`).
+    """
+
+    CREATED = "created"  # Job felvéve
+    STATUS_CHANGE = "status_change"  # Job-státusz átléptetve
+    TASK_CLAIMED = "task_claimed"  # valaki felvette egy task-ot
+    TASK_DONE = "task_done"  # task befejezve
+    TASK_RELEASED = "task_released"  # task pool-ba visszadobva
+    DESIGNER_ASSIGNED = "designer_assigned"  # job grafikusa átállítva
+    COMMENTED = "commented"  # user-komment
+
+
 class Job(Base):
     """A munkalap fő entitása. Egy ügyfél-megrendelés egy Job, akkor is ha
     több gépen készül.
@@ -153,6 +167,11 @@ class Job(Base):
         cascade="all, delete-orphan",
         order_by="JobAttachment.uploaded_at",
     )
+    events: Mapped[list[JobEvent]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="JobEvent.created_at",
+    )
 
 
 class JobTask(Base):
@@ -205,3 +224,24 @@ class JobAttachment(Base):
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     job: Mapped[Job] = relationship(back_populates="attachments")
+
+
+class JobEvent(Base):
+    """Egy Job idővonal-eseménye: státusz-átléptetés, task-akció vagy
+    user-komment. Hasonló a Rendelő `Event` táblájához, de Munkák-saját
+    `jobs_events` prefixszel.
+    """
+
+    __tablename__ = "jobs_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_id: Mapped[int] = mapped_column(
+        ForeignKey("jobs_jobs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    action: Mapped[JobEventAction] = mapped_column(String(30), nullable=False)
+    payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    job: Mapped[Job] = relationship(back_populates="events")
+    user: Mapped[User | None] = relationship()

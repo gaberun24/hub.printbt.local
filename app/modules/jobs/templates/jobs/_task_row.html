@@ -1,0 +1,48 @@
+{# Egy task-row a Job-detail Taskok paneljében.
+   `task` egy JobTask példány, `user` és `job` szintén kontextusban. #}
+
+<div class="task-row">
+  <div class="task-checkbox {% if task.status|string == 'done' %}checked{% elif task.status|string == 'in_progress' %}active{% endif %}"></div>
+  <div class="task-info">
+    <div class="task-type">
+      {{ task.task_type|string|task_type_hu }} · {{ task.quantity }} db
+    </div>
+    <div class="task-text {% if task.status|string == 'done' %}done{% endif %}">
+      {{ task.instructions or "(nincs utasítás)" }}
+    </div>
+  </div>
+
+  <div class="task-meta" style="text-align: right; min-width: 120px;">
+    {% if task.assigned_to %}
+      <div>{{ task.assigned_to.name.split()[0] }}</div>
+    {% else %}
+      <div style="color: var(--ink-subtle);">— pool —</div>
+    {% endif %}
+    {% if task.completed_at %}
+      <div style="font-size: 9px;">{{ task.completed_at|hu_date("time") }}</div>
+    {% endif %}
+  </div>
+
+  {# Akció gombok — task-szintű #}
+  <div style="display: flex; gap: 4px; min-width: 130px; justify-content: flex-end;">
+    {% if task.status|string == "done" %}
+      <span style="font-family: var(--font-mono); font-size: 10px; color: var(--success); font-weight: 700; align-self: center;">✓ KÉSZ</span>
+    {% elif task.assigned_to_user_id == user.id %}
+      {# A felvett user-é: Kész és Pool-ba #}
+      <form method="post" action="/jobs/{{ job.public_id }}/tasks/{{ task.id }}/done" style="display:inline;">
+        <button type="submit" class="btn btn-accent" style="font-size: 11px; padding: 4px 10px;">Kész</button>
+      </form>
+      <form method="post" action="/jobs/{{ job.public_id }}/tasks/{{ task.id }}/release" style="display:inline;">
+        <button type="submit" class="btn btn-ghost" style="font-size: 11px; padding: 4px 8px;" title="Vissza a poolba">↺</button>
+      </form>
+    {% elif task.assigned_to_user_id %}
+      {# Másnál van #}
+      <span style="font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle); align-self: center;">— foglalt —</span>
+    {% else %}
+      {# Pool-ban van — bárki felveheti #}
+      <form method="post" action="/jobs/{{ job.public_id }}/tasks/{{ task.id }}/claim" style="display:inline;">
+        <button type="submit" class="btn" style="font-size: 11px; padding: 4px 10px;">Felveszem</button>
+      </form>
+    {% endif %}
+  </div>
+</div>

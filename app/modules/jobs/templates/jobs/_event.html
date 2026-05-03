@@ -1,0 +1,52 @@
+{# Egy JobEvent renderelése a comment-stream-ben.
+   `ev` egy JobEvent példány. A `commented` action user-stílusú,
+   a többi (created, status_change, task_*) system-stílusú gradiens
+   háttérrel.
+#}
+
+{% if ev.action|string == "commented" %}
+  {% set body = "" %}
+  {% if ev.payload_json %}{% set body = (ev.payload_json|from_json).body %}{% endif %}
+  <div class="comment">
+    {% if ev.user %}
+      <div class="comment-avatar" style="background: linear-gradient(135deg, var(--accent), var(--warning));">{{ ev.user.name|initials|first }}</div>
+    {% else %}
+      <div class="comment-avatar" style="background: var(--ink-subtle);">·</div>
+    {% endif %}
+    <div class="comment-body">
+      <div class="comment-head">
+        <span class="comment-author">{{ ev.user.name if ev.user else "—" }}</span>
+        <span class="comment-time">{{ ev.created_at|hu_date("rel") }}</span>
+      </div>
+      <div class="comment-text">{{ body }}</div>
+    </div>
+  </div>
+{% else %}
+  {% set p = ev.payload_json|from_json %}
+  <div class="comment system">
+    <div class="comment-avatar" style="background: linear-gradient(135deg, var(--info), var(--purple));">⌬</div>
+    <div class="comment-body">
+      <div class="comment-head">
+        <span class="comment-author">{{ ev.user.name if ev.user else "Hub" }}</span>
+        <span class="comment-time">{{ ev.created_at|hu_date("rel") }} · rendszer</span>
+      </div>
+      <div class="comment-text">
+        {% if ev.action|string == "created" %}
+          Job felvéve{% if p.task_count %} · {{ p.task_count }} task{% endif %}{% if p.job_type %} · {{ p.job_type|job_type_hu }}{% endif %}.
+        {% elif ev.action|string == "status_change" %}
+          Státusz: <strong>{{ p.from|status_hu }} → {{ p.to|status_hu }}</strong>{% if p.auto %} (automatikus){% endif %}.
+        {% elif ev.action|string == "task_claimed" %}
+          Felvette a <strong>{{ p.task_type|task_type_hu }}</strong> taskot.
+        {% elif ev.action|string == "task_done" %}
+          Kész: <strong>{{ p.task_type|task_type_hu }}</strong>.
+        {% elif ev.action|string == "task_released" %}
+          Pool-ba dobta a <strong>{{ p.task_type|task_type_hu }}</strong> taskot.
+        {% elif ev.action|string == "designer_assigned" %}
+          Grafikus átállítva.
+        {% else %}
+          {{ ev.action }}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endif %}

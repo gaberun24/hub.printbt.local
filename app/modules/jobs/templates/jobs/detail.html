@@ -7,7 +7,9 @@
 {% block main %}
 <div class="job-detail">
 
+  {# ────────────────────── BAL OLDAL ────────────────────── #}
   <div class="job-detail-main">
+
     <div class="job-hero {% if job.is_urgent %}urgent{% endif %}">
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
         <div>
@@ -59,17 +61,20 @@
             <div class="detail-value mono">{{ "{:,}".format(job.price_huf).replace(",", " ") }} Ft</div>
           </div>
         {% endif %}
-        {% if job.assigned_designer %}
-          <div class="detail-row">
-            <div class="detail-label">Grafikus</div>
-            <div class="detail-value">{{ job.assigned_designer.name }}</div>
+        <div class="detail-row">
+          <div class="detail-label">Grafikus</div>
+          <div class="detail-value" style="display: flex; gap: 8px; align-items: center;">
+            <form method="post" action="/jobs/{{ job.public_id }}/assign-designer" style="display: flex; gap: 6px; align-items: center;">
+              <select name="designer_id" class="form-input" style="padding: 4px 8px; font-size: 12px; min-width: 200px;">
+                <option value="pool" {% if not job.assigned_designer_id %}selected{% endif %}>— közös pool —</option>
+                {% for d in designers %}
+                  <option value="{{ d.id }}" {% if job.assigned_designer_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn" style="font-size: 11px; padding: 4px 10px;">Átadás</button>
+            </form>
           </div>
-        {% else %}
-          <div class="detail-row">
-            <div class="detail-label">Grafikus</div>
-            <div class="detail-value" style="color: var(--ink-subtle);">— közös pool</div>
-          </div>
-        {% endif %}
+        </div>
         {% if job.source_file_path %}
           <div class="detail-row">
             <div class="detail-label">Forrás</div>
@@ -79,6 +84,7 @@
       </div>
     </div>
 
+    {# Taskok — task-szintű akciók #}
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">Taskok</div>
@@ -88,53 +94,98 @@
         </div>
       </div>
       {% for task in job.tasks %}
-        <div class="task-row">
-          <div class="task-checkbox {% if task.status == 'done' %}checked{% elif task.status == 'in_progress' %}active{% endif %}"></div>
-          <div class="task-info">
-            <div class="task-type">
-              {% if task.task_type == 'uv_print' %}UV nyomtatás
-              {% elif task.task_type == 'co2_laser' %}CO2 lézer
-              {% elif task.task_type == 'fiber_laser' %}Fiber lézer
-              {% elif task.task_type == 'dtf_print' %}DTF nyomtatás
-              {% elif task.task_type == 'dtf_press' %}DTF vasalás
-              {% elif task.task_type == 'mug_press' %}Bögre press
-              {% elif task.task_type == 'engrave_manual' %}Gravír (kézi)
-              {% elif task.task_type == 'stamp' %}Bélyegző
-              {% elif task.task_type == 'business_card' %}Névjegy
-              {% elif task.task_type == 'sticker' %}Matrica
-              {% elif task.task_type == 'large_format' %}Nagyformátum
-              {% else %}Egyéb
-              {% endif %}
-              · {{ task.quantity }} db
-            </div>
-            <div class="task-text">{{ task.instructions or "(nincs utasítás)" }}</div>
-          </div>
-          <div class="task-meta">
-            {% if task.assigned_to %}{{ task.assigned_to.name.split()[0] }}{% else %}függő{% endif %}
-          </div>
-        </div>
+        {% include "jobs/_task_row.html" %}
       {% endfor %}
     </div>
 
-    <div class="action-bar">
-      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
-        Az állapot-átléptetés és kommentek a 2.3 fázisban jönnek.
-      </span>
+    {# Action bar — Job-szintű state-átléptetés #}
+    {% if next_states %}
+      <div class="action-bar">
+        {% for ns in next_states %}
+          <form method="post" action="/jobs/{{ job.public_id }}/state" style="display: inline;">
+            <input type="hidden" name="next_status" value="{{ ns }}">
+            <button type="submit" class="btn {% if ns in ['atadva', 'muhelyben'] %}btn-accent{% endif %}">
+              {% if ns == 'grafikan' %}Grafikára
+              {% elif ns == 'kesz_latvany' %}Kész látvány
+              {% elif ns == 'ugyfel_jovahagyas_var' %}Ügyfél-jóváhagyás vár
+              {% elif ns == 'muhelyben' %}Műhelybe küld
+              {% elif ns == 'atadva' %}Átadva
+              {% elif ns == 'visszahivva' %}Visszahívom
+              {% else %}{{ ns|status_hu }}
+              {% endif %}
+            </button>
+          </form>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="action-bar">
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
+          {% if job.status|string == "atadva" %}A munka átadva, lezárva.
+          {% elif job.status|string == "kesz" %}Minden task kész — várja az átadást.
+          {% else %}Nincs elérhető manuális állapotváltás.
+          {% endif %}
+        </span>
+      </div>
+    {% endif %}
+
+    {# Komment-stream + composer #}
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Idővonal és kommentek</div>
+      </div>
+      <div class="panel-body">
+        {% if job.events %}
+          <div class="comment-stream">
+            {% for ev in job.events %}
+              {% include "jobs/_event.html" %}
+            {% endfor %}
+          </div>
+        {% else %}
+          <div style="color: var(--ink-subtle); font-size: 13px;">Még nincs esemény.</div>
+        {% endif %}
+
+        <form method="post" action="/jobs/{{ job.public_id }}/comment" class="composer">
+          <input name="body" placeholder="Komment hozzáadása…" required>
+          <button type="submit" class="btn btn-primary" style="font-size: 12px;">Küld</button>
+        </form>
+      </div>
     </div>
   </div>
 
+  {# ────────────────────── JOBB OLDAL ────────────────────── #}
   <div class="job-detail-side">
+
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">Idővonal</div>
       </div>
       <div class="timeline" style="padding: 8px 16px 16px;">
-        <div class="timeline-item current">
-          <div>
-            <div class="timeline-status">{{ job.status|string|status_hu }}</div>
-            <div class="timeline-meta">{{ job.created_at|hu_date("rel") }}</div>
+        {% set status_events = job.events|selectattr("action", "in", ["created", "status_change"])|list %}
+        {% if status_events %}
+          {% for ev in status_events %}
+            <div class="timeline-item {% if loop.last and job.status|string not in ['atadva', 'visszahivva'] %}current{% else %}done{% endif %}">
+              <div>
+                <div class="timeline-status">
+                  {% if ev.action|string == "created" %}Felvéve
+                  {% else %}
+                    {% set p = ev.payload_json|from_json %}
+                    {{ p.to|status_hu if p.to else "—" }}
+                  {% endif %}
+                </div>
+                <div class="timeline-meta">
+                  {% if ev.user %}{{ ev.user.name.split()[0] }} · {% endif %}{{ ev.created_at|hu_date("rel") }}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="timeline-item current">
+            <div>
+              <div class="timeline-status">{{ job.status|string|status_hu }}</div>
+              <div class="timeline-meta">{{ job.created_at|hu_date("rel") }}</div>
+            </div>
           </div>
-        </div>
+        {% endif %}
       </div>
     </div>
 
