@@ -99,35 +99,55 @@ def _hu_date(value, fmt: str = "long") -> str:
 
 
 def _status_hu(value: str) -> str:
-    """Rendelő státusz vagy event-action angol enum → magyar UI-szöveg.
+    """Status / event-action / Job-status angol enum → magyar UI-szöveg.
 
-    A státusz-mapping (`new`, `ordered`, `arrived`, `cancelled`) elsőbbséget
-    élvez. Az event-action-ok (`created`, `edited`, `commented`, `reassigned`)
-    is itt vannak, hogy a timeline-on egyetlen filterrel megkapjuk a magyar
-    szöveget.
+    Több modul státuszait egy filterben kezeli (overlap esetén a Rendelő
+    státusza nyer, mert az volt először). A Munkák modul Job-státuszait
+    a `STATUS_LABELS_HU` alapján fűzi be.
     """
+    # Lazy import — a Jinja-filter elérhető legyen mielőtt a Munkák modul
+    # ténylegesen importálódna (pl. CLI vagy migrációs script futtatáskor)
+    try:
+        from app.modules.jobs.services import STATUS_LABELS_HU
+
+        job_labels = STATUS_LABELS_HU
+    except ImportError:
+        job_labels = {}
+
     mapping = {
-        # request status
+        # Rendelő status
         "new": "új",
         "ordered": "megrendelve",
         "arrived": "megérkezett",
         "cancelled": "lezárt",
-        # event action (a status-szal átfedő nevek a status-mapping fölött vannak)
+        # Rendelő event-action
         "created": "felvett",
         "edited": "módosítva",
         "commented": "kommentelt",
         "reassigned": "átadva",
+        # Munkák Job-status (a `STATUS_LABELS_HU`-ból mergelve)
+        **job_labels,
     }
     return mapping.get(value, value)
 
 
 def _status_hu_class(value: str) -> str:
-    """A `req-status-pill` CSS-modifier osztálya, mockup-szerinti névvel."""
+    """A `req-status-pill` és `status-pill` CSS-modifier osztálya."""
+    try:
+        from app.modules.jobs.services import STATUS_CLASS
+
+        job_classes = STATUS_CLASS
+    except ImportError:
+        job_classes = {}
+
     mapping = {
+        # Rendelő
         "new": "uj",
         "ordered": "megrendelve",
         "arrived": "megerkezett",
         "cancelled": "lezart",
+        # Munkák (a CSS osztály-nevek a mockuphoz illeszkednek)
+        **job_classes,
     }
     return mapping.get(value, value)
 
