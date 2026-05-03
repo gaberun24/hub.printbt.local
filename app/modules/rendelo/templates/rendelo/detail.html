@@ -1,0 +1,225 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/rendelo" class="btn">Vissza a listához</a>
+{% endblock %}
+
+{% block main %}
+<div class="request-detail-grid">
+
+  {# ────────────────────── BAL OLDAL ────────────────────── #}
+  <div>
+
+    {# Hero #}
+    <div class="job-hero {% if req.status == 'new' %}urgent{% endif %}">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+        <div>
+          <div style="font-family: var(--font-mono); font-size:11px; color: var(--ink-subtle); letter-spacing:0.05em; margin-bottom: 4px; display:flex; align-items:center; gap:8px;">
+            <span class="module-marker module-rendelo"></span>
+            RENDELŐ · IGÉNY #{{ req.id }} · {{ req.category.name|upper }}
+          </div>
+          <div style="font-family: var(--font-display); font-weight:600; font-size:28px; letter-spacing:-0.01em;">
+            {% if req.lines %}
+              {{ req.lines[0].title }}{% if req.lines|length > 1 %}<span style="color: var(--ink-subtle); font-weight:500;"> + {{ req.lines|length - 1 }} további</span>{% endif %}
+            {% else %}
+              {{ req.note or "(nincs cím)" }}
+            {% endif %}
+          </div>
+          {% if req.note and req.lines %}
+            <div style="font-family: var(--font-display); font-style: italic; font-size: 14px; color: var(--ink-muted); margin-top: 6px;">
+              {{ req.note }}
+            </div>
+          {% endif %}
+        </div>
+        <div style="text-align:right;">
+          {% if req.lines %}
+            {% set total = req.lines|sum(attribute="qty") %}
+            <div style="font-family: var(--font-mono); font-weight:700; font-size:48px; line-height:1; color: var(--accent);">
+              {{ total|int if total == total|int else total }}<span style="font-size:18px; color:var(--ink-muted); font-weight:500; margin-left:6px;">{{ req.lines[0].unit }}</span>
+            </div>
+          {% endif %}
+          <span class="req-status-pill {{ req.status|string|status_hu_class }}" style="margin-top:8px;">{{ req.status|string|status_hu }}</span>
+        </div>
+      </div>
+    </div>
+
+    {# Részletek panel #}
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Részletek</div>
+      </div>
+      <div class="panel-body" style="padding: 0 16px;">
+        <div class="detail-row">
+          <div class="detail-label">Kategória</div>
+          <div class="detail-value">
+            <span class="rendelo-cat-tag" style="--cat-color: {{ req.category.color }};">
+              <span class="cat-dot" aria-hidden="true"></span>{{ req.category.name }}
+            </span>
+          </div>
+        </div>
+        <div class="detail-row">
+          <div class="detail-label">Felvette</div>
+          <div class="detail-value">{{ req.requested_by.name }} · <span class="mono">{{ req.created_at|hu_date("time") }}</span></div>
+        </div>
+        {% if req.ordered_by %}
+          <div class="detail-row">
+            <div class="detail-label">Megrendelte</div>
+            <div class="detail-value">{{ req.ordered_by.name }} · <span class="mono">{{ req.ordered_at|hu_date("time") if req.ordered_at else "—" }}</span></div>
+          </div>
+        {% endif %}
+        {% if req.supplier %}
+          <div class="detail-row">
+            <div class="detail-label">Beszállító</div>
+            <div class="detail-value">{{ req.supplier }}</div>
+          </div>
+        {% endif %}
+        {% if req.order_ref %}
+          <div class="detail-row">
+            <div class="detail-label">Rendelés-ref</div>
+            <div class="detail-value mono">{{ req.order_ref }}</div>
+          </div>
+        {% endif %}
+        {% if req.arrived_at %}
+          <div class="detail-row">
+            <div class="detail-label">Megérkezett</div>
+            <div class="detail-value mono">{{ req.arrived_at|hu_date("time") }}</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Tételek panel — ha vannak rendelési sorok #}
+    {% if req.lines %}
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Tételek</div>
+          <div style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">{{ req.lines|length }} sor</div>
+        </div>
+        {% for line in req.lines %}
+          <div class="task-row">
+            <div class="task-checkbox {% if req.status == 'arrived' %}checked{% elif req.status == 'ordered' %}active{% endif %}"></div>
+            <div class="task-info">
+              <div class="task-text">{{ line.title }}</div>
+              <div class="task-meta">#{{ line.line_no }}</div>
+            </div>
+            <div class="req-quantity" style="text-align: right;">
+              {{ line.qty|int if line.qty == line.qty|int else line.qty }}
+              <span class="unit">{{ line.unit }}</span>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# Kommentek + status timeline panel #}
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Kommentek és státusz</div>
+      </div>
+      <div class="panel-body">
+        <div class="comment-stream">
+          {% for ev in req.events %}
+            {% include "rendelo/_comment.html" %}
+          {% endfor %}
+        </div>
+
+        <form method="post" action="/rendelo/{{ req.id }}/comment" class="composer">
+          <input name="body" placeholder="Komment hozzáadása…" required>
+          <button type="submit" class="btn btn-primary" style="font-size: 12px;">Küld</button>
+        </form>
+      </div>
+    </div>
+
+    {# Action bar — a státusztól függően változó gomb-szett #}
+    <div class="action-bar">
+      {% if req.status == 'new' %}
+        {% if user.is_admin or user.is_orderer %}
+          <form method="post" action="/rendelo/{{ req.id }}/state" style="display:inline;">
+            <input type="hidden" name="next_status" value="ordered">
+            <button type="submit" class="btn btn-accent">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+              Megrendelve jelölés
+            </button>
+          </form>
+          <form method="post" action="/rendelo/{{ req.id }}/state" style="display:inline;">
+            <input type="hidden" name="next_status" value="arrived">
+            <button type="submit" class="btn">Készletbe írás</button>
+          </form>
+        {% endif %}
+        <form method="post" action="/rendelo/{{ req.id }}/state" style="display:inline;">
+          <input type="hidden" name="next_status" value="cancelled">
+          <button type="submit" class="btn btn-ghost">Lezárás (nem rendeljük)</button>
+        </form>
+      {% elif req.status == 'ordered' %}
+        {% if user.is_admin or user.is_orderer %}
+          <form method="post" action="/rendelo/{{ req.id }}/state" style="display:inline;">
+            <input type="hidden" name="next_status" value="arrived">
+            <button type="submit" class="btn btn-accent">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Készletbe írás (megérkezett)
+            </button>
+          </form>
+        {% endif %}
+        <form method="post" action="/rendelo/{{ req.id }}/state" style="display:inline;">
+          <input type="hidden" name="next_status" value="cancelled">
+          <button type="submit" class="btn btn-ghost">Lezárás</button>
+        </form>
+      {% elif req.status == 'cancelled' %}
+        <form method="post" action="/rendelo/{{ req.id }}/state" style="display:inline;">
+          <input type="hidden" name="next_status" value="reopen">
+          <button type="submit" class="btn">Újranyitás</button>
+        </form>
+      {% else %}
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
+          Az igény lezárult. További akció nincs.
+        </span>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ────────────────────── JOBB OLDAL ────────────────────── #}
+  <div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Idővonal</div>
+      </div>
+      <div class="timeline" style="padding: 8px 16px 16px;">
+        {% set ts = req.events|selectattr("action", "in", ["created", "ordered", "arrived", "cancelled", "edited"])|list %}
+        {% for ev in ts %}
+          <div class="timeline-item {% if loop.last and req.status != 'cancelled' and req.status != 'arrived' %}current{% else %}done{% endif %}">
+            <div>
+              <div class="timeline-status">{{ ev.action|string|status_hu }}</div>
+              <div class="timeline-meta">
+                {% if ev.user %}{{ ev.user.name.split()[0] }} · {% endif %}{{ ev.created_at|hu_date("time") }}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% if req.status == 'new' and (user.is_admin or user.is_orderer) %}
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Beszállító megadása (opcionális)</div>
+        </div>
+        <div class="panel-body">
+          <form method="post" action="/rendelo/{{ req.id }}/state">
+            <input type="hidden" name="next_status" value="ordered">
+            <div class="form-group">
+              <label class="form-label">Beszállító neve</label>
+              <input class="form-input" name="supplier" placeholder="Pl. Office365 Kft.">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Rendelés-ref</label>
+              <input class="form-input" name="order_ref" placeholder="Pl. PO-2026-0042">
+            </div>
+            <button type="submit" class="btn btn-accent" style="width: 100%;">Megrendelve mentés</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

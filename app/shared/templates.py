@@ -99,12 +99,24 @@ def _hu_date(value, fmt: str = "long") -> str:
 
 
 def _status_hu(value: str) -> str:
-    """Rendelő státusz angol enum → magyar UI-szöveg."""
+    """Rendelő státusz vagy event-action angol enum → magyar UI-szöveg.
+
+    A státusz-mapping (`new`, `ordered`, `arrived`, `cancelled`) elsőbbséget
+    élvez. Az event-action-ok (`created`, `edited`, `commented`, `reassigned`)
+    is itt vannak, hogy a timeline-on egyetlen filterrel megkapjuk a magyar
+    szöveget.
+    """
     mapping = {
+        # request status
         "new": "új",
         "ordered": "megrendelve",
         "arrived": "megérkezett",
         "cancelled": "lezárt",
+        # event action (a status-szal átfedő nevek a status-mapping fölött vannak)
+        "created": "felvett",
+        "edited": "módosítva",
+        "commented": "kommentelt",
+        "reassigned": "átadva",
     }
     return mapping.get(value, value)
 
@@ -120,7 +132,20 @@ def _status_hu_class(value: str) -> str:
     return mapping.get(value, value)
 
 
+def _from_json(value):
+    """JSON string → Python obj. A Rendelő Event payload-jához kell."""
+    import json
+
+    if not value:
+        return {}
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return {}
+
+
 templates.env.filters["initials"] = _initials
 templates.env.filters["hu_date"] = _hu_date
 templates.env.filters["status_hu"] = _status_hu
 templates.env.filters["status_hu_class"] = _status_hu_class
+templates.env.filters["from_json"] = _from_json

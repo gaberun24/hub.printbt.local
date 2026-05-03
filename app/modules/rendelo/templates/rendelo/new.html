@@ -1,0 +1,67 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/rendelo" class="btn">Mégsem</a>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Új <em>igény</em></h1>
+<div class="greeting-date">Belső rendelés-kérés — kategória, tételek, megjegyzés</div>
+
+{% if error %}
+  <div class="auth-error" role="alert" style="max-width: 720px; margin-top: 16px;">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="/rendelo/new" style="max-width: 720px; margin-top: 24px;">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Alapadatok</div>
+    </div>
+    <div class="panel-body">
+      <div class="form-group">
+        <label class="form-label" for="category_id">Kategória</label>
+        <select class="form-input" name="category_id" id="category_id" required>
+          {% for cat in categories %}
+            <option value="{{ cat.id }}">{{ cat.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="note">Megjegyzés (opcionális)</label>
+        <textarea class="form-textarea" name="note" id="note"
+                  placeholder="Pl. 'sürgős, holnapra kell'"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Tételek</div>
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
+        töltsd ki amennyit kell, üres sorokat átugrunk
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="task-builder">
+        {% for i in range(5) %}
+          <div class="task-builder-row">
+            <input name="line_unit" placeholder="db / l / csomag" value="db">
+            <input name="line_title" placeholder="Tétel megnevezése">
+            <input name="line_qty" class="qty" placeholder="1">
+            <span style="color: var(--ink-subtle); font-family: var(--font-mono); font-size:10px; text-align:center;">#{{ i + 1 }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <button type="submit" class="btn btn-accent">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Igény mentése
+    </button>
+    <a href="/rendelo" class="btn btn-ghost">Mégsem</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,27 +1,39 @@
-"""Rendelő modul page-route-jai (read-only Fázis 1.1-ben).
+"""Rendelő modul page-route-jai.
 
-A Fázis 1.2-ben jönnek a CRUD route-ok (új igény, megrendelés,
-megérkezés, kommentek). Most csak a lista + summary cards + szűrők.
+Fázis 1.2-ben lett teljes CRUD: új igény form, részletek nézet,
+státusz-átléptetés (order/arrive/cancel), kommentek.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, status
 from fastapi import Request as FastAPIRequest
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.modules.rendelo.models import Category, Request, RequestStatus
+from app.modules.rendelo.models import (
+    Category,
+    Event,
+    EventAction,
+    Request,
+    RequestLine,
+    RequestStatus,
+)
 from app.shared.db import get_db
 from app.shared.dependencies import current_user
-from app.shared.models import User, utcnow
+from app.shared.models import AuditEntityType, AuditLog, User, utcnow
 from app.shared.sidebar import sidebar_context
 from app.shared.templates import templates
 
 router = APIRouter(prefix="/rendelo", tags=["rendelo"])
+
+
+# ───────────────────────── helpers ─────────────────────────
 
 
 def _summary(db: Session, user: User) -> dict:
@@ -67,6 +79,65 @@ def _summary(db: Session, user: User) -> dict:
         "arrived_month_count": arrived_month_count,
         "own_count": own_count,
     }
+
+
+def _categories(db: Session) -> list[Category]:
+    return list(
+        db.execute(select(Category).order_by(Category.sort_order, Category.name)).scalars().all()
+    )
+
+
+def _audit(
+    db: Session,
+    user_id: int,
+    request_id: int,
+    action: str,
+    *,
+    old_value: str | None = None,
+    new_value: str | None = None,
+) -> None:
+    db.add(
+        AuditLog(
+            entity_type=AuditEntityType.REQUEST,
+            entity_id=request_id,
+            action=action,
+            old_value=old_value,
+            new_value=new_value,
+            user_id=user_id,
+        )
+    )
+
+
+def _load_request_or_404(db: Session, request_id: int) -> Request:
+    stmt = (
+        select(Request)
+        .options(
+            selectinload(Request.lines),
+            selectinload(Request.requested_by),
+            selectinload(Request.ordered_by),
+            selectinload(Request.category),
+            selectinload(Request.events).selectinload(Event.user),
+        )
+        .where(Request.id == request_id)
+    )
+    obj = db.execute(stmt).scalar_one_or_none()
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Igény nem található.")
+    return obj
+
+
+def _parse_qty(raw: str) -> Decimal | None:
+    """Form-ból érkezett mennyiség: '1', '2.5', '1,5' → Decimal. Üres → None."""
+    s = (raw or "").strip().replace(",", ".")
+    if not s:
+        return None
+    try:
+        return Decimal(s)
+    except InvalidOperation:
+        return None
+
+
+# ───────────────────────── list ─────────────────────────
 
 
 @router.get("", response_class=HTMLResponse)
@@ -127,3 +198,235 @@ def rendelo_list(
             **sidebar_context(db, user, active_key="rendelo_list"),
         },
     )
+
+
+# ───────────────────────── new ─────────────────────────
+
+
+@router.get("/new", response_class=HTMLResponse)
+def rendelo_new_form(
+    request: FastAPIRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+    error: str | None = Query(None),
+) -> HTMLResponse:
+    """Új igény felvevő-form."""
+    return templates.TemplateResponse(
+        request,
+        "rendelo/new.html",
+        {
+            "user": user,
+            "title": "Új igény",
+            "topbar_title": "Új igény",
+            "topbar_subtitle": "egy új belső rendelés-kérés",
+            "categories": _categories(db),
+            "error": error,
+            **sidebar_context(db, user, active_key="rendelo_list"),
+        },
+    )
+
+
+@router.post("/new")
+def rendelo_new_submit(
+    request: FastAPIRequest,
+    category_id: int = Form(...),
+    note: str | None = Form(None),
+    line_title: list[str] = Form(default_factory=list),
+    line_qty: list[str] = Form(default_factory=list),
+    line_unit: list[str] = Form(default_factory=list),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    if db.get(Category, category_id) is None:
+        return RedirectResponse(
+            url="/rendelo/new?error=Ismeretlen+kateg%C3%B3ria",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    cleaned: list[tuple[str, Decimal, str]] = []
+    for raw_title, raw_qty, raw_unit in zip(line_title, line_qty, line_unit, strict=False):
+        title = (raw_title or "").strip()
+        if not title:
+            continue
+        qty = _parse_qty(raw_qty) or Decimal("1")
+        unit = (raw_unit or "db").strip() or "db"
+        cleaned.append((title, qty, unit))
+
+    if not cleaned and not (note and note.strip()):
+        return RedirectResponse(
+            url="/rendelo/new?error=Adj+meg+legal%C3%A1bb+egy+t%C3%A9telt+vagy+megjegyz%C3%A9st",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    req = Request(
+        category_id=category_id,
+        note=(note or "").strip() or None,
+        requested_by_id=user.id,
+        status=RequestStatus.NEW,
+    )
+    db.add(req)
+    db.flush()
+
+    for idx, (title, qty, unit) in enumerate(cleaned, start=1):
+        db.add(
+            RequestLine(
+                request_id=req.id,
+                line_no=idx,
+                title=title,
+                qty=qty,
+                unit=unit,
+            )
+        )
+
+    db.add(
+        Event(
+            request_id=req.id,
+            user_id=user.id,
+            action=EventAction.CREATED,
+            payload_json=json.dumps(
+                {"line_count": len(cleaned), "category_id": category_id}, ensure_ascii=False
+            ),
+        )
+    )
+    _audit(db, user.id, req.id, "create", new_value="new")
+
+    db.commit()
+    return RedirectResponse(url=f"/rendelo/{req.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ───────────────────────── detail ─────────────────────────
+
+
+@router.get("/{request_id}", response_class=HTMLResponse)
+def rendelo_detail(
+    request_id: int,
+    request: FastAPIRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    obj = _load_request_or_404(db, request_id)
+    return templates.TemplateResponse(
+        request,
+        "rendelo/detail.html",
+        {
+            "user": user,
+            "title": f"Igény #{obj.id}",
+            "topbar_title": f"Igény #{obj.id}",
+            "topbar_subtitle": obj.category.name,
+            "req": obj,
+            **sidebar_context(db, user, active_key="rendelo_list"),
+        },
+    )
+
+
+# ───────────────────────── state transitions ─────────────────────────
+
+
+_NEXT_STATE_LABELS = {
+    "ordered": "megrendelt",
+    "arrived": "megérkezett",
+    "cancelled": "lezárt",
+    "reopen": "újranyitott",
+}
+
+
+@router.post("/{request_id}/state")
+def rendelo_change_state(
+    request_id: int,
+    next_status: str = Form(...),
+    supplier: str | None = Form(None),
+    order_ref: str | None = Form(None),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    obj = _load_request_or_404(db, request_id)
+    old_status = obj.status
+
+    if next_status == "ordered":
+        if obj.status != RequestStatus.NEW:
+            raise HTTPException(409, "Csak `new` státuszból lehet megrendelni.")
+        if not (user.is_admin or user.is_orderer):
+            raise HTTPException(403, "Nincs rendelő-jogod.")
+        obj.status = RequestStatus.ORDERED
+        obj.ordered_by_id = user.id
+        obj.ordered_at = utcnow()
+        if supplier and supplier.strip():
+            obj.supplier = supplier.strip()
+        if order_ref and order_ref.strip():
+            obj.order_ref = order_ref.strip()
+        action = EventAction.ORDERED
+
+    elif next_status == "arrived":
+        if obj.status not in (RequestStatus.NEW, RequestStatus.ORDERED):
+            raise HTTPException(
+                409, "Csak `new` vagy `ordered` állapotból lehet megérkezésre állítani."
+            )
+        if not (user.is_admin or user.is_orderer):
+            raise HTTPException(403, "Nincs rendelő-jogod.")
+        obj.status = RequestStatus.ARRIVED
+        obj.arrived_at = utcnow()
+        action = EventAction.ARRIVED
+
+    elif next_status == "cancelled":
+        if obj.status in (RequestStatus.ARRIVED, RequestStatus.CANCELLED):
+            raise HTTPException(409, "Lezárt vagy érkezett igényt nem lehet újra lezárni.")
+        obj.status = RequestStatus.CANCELLED
+        action = EventAction.CANCELLED
+
+    elif next_status == "reopen":
+        if obj.status != RequestStatus.CANCELLED:
+            raise HTTPException(409, "Csak lezártat lehet újranyitni.")
+        obj.status = RequestStatus.NEW
+        action = EventAction.EDITED
+
+    else:
+        raise HTTPException(400, f"Ismeretlen státusz: {next_status}")
+
+    db.add(
+        Event(
+            request_id=obj.id,
+            user_id=user.id,
+            action=action,
+            payload_json=json.dumps(
+                {
+                    "from": str(old_status),
+                    "to": str(obj.status),
+                    "supplier": obj.supplier,
+                    "order_ref": obj.order_ref,
+                },
+                ensure_ascii=False,
+            ),
+        )
+    )
+    _audit(
+        db, user.id, obj.id, "status_change", old_value=str(old_status), new_value=str(obj.status)
+    )
+    db.commit()
+    return RedirectResponse(url=f"/rendelo/{obj.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ───────────────────────── comments ─────────────────────────
+
+
+@router.post("/{request_id}/comment")
+def rendelo_comment(
+    request_id: int,
+    body: str = Form(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    obj = _load_request_or_404(db, request_id)
+    body = (body or "").strip()
+    if not body:
+        return RedirectResponse(url=f"/rendelo/{obj.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+    db.add(
+        Event(
+            request_id=obj.id,
+            user_id=user.id,
+            action=EventAction.COMMENTED,
+            payload_json=json.dumps({"body": body}, ensure_ascii=False),
+        )
+    )
+    db.commit()
+    return RedirectResponse(url=f"/rendelo/{obj.id}", status_code=status.HTTP_303_SEE_OTHER)

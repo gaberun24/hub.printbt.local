@@ -1,0 +1,42 @@
+{# Egy event-bejegyzés a Rendelő-detail comment-stream-jében.
+   Vagy user-komment (action=commented), vagy státusz-átléptetés (created/
+   ordered/arrived/cancelled/edited) — utóbbiak system-stílusban renderelődnek.
+   `ev` egy Event modell-példány a kontextusban. #}
+
+{% if ev.action|string == "commented" %}
+  {% set body = "" %}
+  {% if ev.payload_json %}{% set body = (ev.payload_json|from_json).body %}{% endif %}
+  <div class="comment">
+    {% if ev.user %}
+      <div class="comment-avatar" style="background: linear-gradient(135deg, var(--accent), var(--warning));">{{ ev.user.name|initials|first }}</div>
+    {% else %}
+      <div class="comment-avatar" style="background: var(--ink-subtle);">·</div>
+    {% endif %}
+    <div class="comment-body">
+      <div class="comment-head">
+        <span class="comment-author">{{ ev.user.name if ev.user else "—" }}</span>
+        <span class="comment-time">{{ ev.created_at|hu_date("rel") }}</span>
+      </div>
+      <div class="comment-text">{{ body }}</div>
+    </div>
+  </div>
+{% else %}
+  <div class="comment system">
+    <div class="comment-avatar" style="background: linear-gradient(135deg, var(--info), var(--purple));">⌬</div>
+    <div class="comment-body">
+      <div class="comment-head">
+        <span class="comment-author">{{ ev.user.name if ev.user else "Hub" }}</span>
+        <span class="comment-time">{{ ev.created_at|hu_date("rel") }} · státusz</span>
+      </div>
+      <div class="comment-text">
+        {% if ev.action|string == "created" %}Igény felvéve.
+        {% elif ev.action|string == "ordered" %}Megrendelve a beszállítónak.
+        {% elif ev.action|string == "arrived" %}Megérkezett, készletbe írva.
+        {% elif ev.action|string == "cancelled" %}Lezárva — nem rendeljük.
+        {% elif ev.action|string == "edited" %}Módosítva.
+        {% else %}{{ ev.action }}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endif %}
