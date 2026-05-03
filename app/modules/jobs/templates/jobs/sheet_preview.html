@@ -1,0 +1,118 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/jobs/{{ job.public_id }}" class="btn">Vissza a munkához</a>
+{% endblock %}
+
+{% block main %}
+<div style="display:flex; align-items:center; justify-content: space-between; margin-bottom: 4px;">
+  <div>
+    <div style="font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-subtle);">
+      Munkalap előnézet · {{ job.public_id[:3] }}-{{ job.public_id[3:] }} · 1/1
+    </div>
+    <div style="font-family: var(--font-display); font-style: italic; font-size: 14px; color: var(--ink-muted); margin-top:2px;">
+      A nyomtatott PDF nézete — A4, fekete-fehér tonerre optimalizálva.
+    </div>
+  </div>
+  <a href="/sheet/{{ job.public_id }}/pdf" class="btn btn-primary" target="_blank">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    PDF letöltés
+  </a>
+</div>
+
+<div class="sheet-frame">
+  <div class="a4-sheet">
+
+    <div class="sheet-header">
+      <div>
+        <div class="sheet-id">{{ job.public_id[:3] }}-{{ job.public_id[3:] }}</div>
+        <div class="sheet-customer-block">
+          <div class="sheet-customer">{{ job.customer.name }}</div>
+          <div class="sheet-contact">
+            {% if job.customer.phone %}{{ job.customer.phone }}{% endif %}
+            {% if job.customer.phone and job.customer.email %} · {% endif %}
+            {% if job.customer.email %}{{ job.customer.email }}{% endif %}
+            {% if job.customer.customer_type == 'reseller' %}
+              · VTL{% if job.customer.discount_pct %} (−{{ job.customer.discount_pct }}%){% endif %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="deadline-box {% if job.is_urgent %}urgent{% endif %}">
+        <div class="deadline-label">Határidő</div>
+        <div class="deadline-value">{{ job.deadline|hu_date("short") }}</div>
+        {% if job.is_urgent %}
+          <div class="urgent-stamp">SÜRGŐS</div>
+        {% endif %}
+        {% if job.price_huf %}
+          <div class="deadline-price">{{ "{:,}".format(job.price_huf).replace(",", " ") }} Ft</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="sheet-preview">
+      <span class="preview-corner tl">LÁTVÁNY · —</span>
+      <span class="preview-corner br">—</span>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: #6B6358; text-align: center;">
+        Látvány feltöltése után<br/>itt jelenik meg a preview
+      </div>
+    </div>
+
+    <div class="sheet-instructions">
+      <div>
+        <div class="sheet-section-label">Taskok / Lépések</div>
+        <ul class="sheet-tasks">
+          {% for task in job.tasks %}
+            <li>
+              <div class="sheet-checkbox"></div>
+              <div>
+                {{ task.task_type|string|task_type_hu }}
+                {% if task.quantity and task.quantity > 1 %} · {{ task.quantity }} db{% endif %}
+                {% if task.instructions %} · {{ task.instructions }}{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="sheet-section-label">Leírás / Megjegyzés</div>
+        <div class="sheet-note">
+          {% if job.description %}
+            {{ job.description }}
+          {% else %}
+            <span style="color: #6B6358; font-style: italic;">(nincs leírás)</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div class="sheet-footer-row">
+        <span>
+          <strong>Fájl:</strong>
+          {% if job.source_file_path %}{{ job.source_file_path }}{% else %}—{% endif %}
+        </span>
+        <span>oldal 1/1</span>
+      </div>
+      <div class="sheet-footer-row">
+        <span>
+          <strong>Felvette:</strong> {{ job.intake_user.name.split()[0] }} ·
+          {{ job.created_at|hu_date("time") }} ·
+          {% if job.intake_channel == 'email' %}email
+          {% elif job.intake_channel == 'workshop_dropoff' %}műhely-behozta
+          {% elif job.intake_channel == 'phone' %}telefon
+          {% else %}személyes{% endif %}
+        </span>
+        <span><strong>ID:</strong> {{ job.public_id[:3] }}-{{ job.public_id[3:] }}</span>
+      </div>
+
+      <div class="sheet-handnote">
+        <div class="sheet-handnote-label">Műhely megjegyzés (kézzel)</div>
+        <div class="sheet-handnote-line"></div>
+        <div class="sheet-handnote-line"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

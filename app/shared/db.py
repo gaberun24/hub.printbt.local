@@ -84,3 +84,19 @@ def init_db() -> None:
         )
 
     _alembic_upgrade_head()
+    _seed_system_settings()
+
+
+def _seed_system_settings() -> None:
+    """DEFAULT_SYSTEM_SETTINGS idempotens upsert — ami nincs a DB-ben, beszúrja."""
+    from app.shared.models import DEFAULT_SYSTEM_SETTINGS, SystemSetting
+
+    db = SessionLocal()
+    try:
+        for key, (value, description) in DEFAULT_SYSTEM_SETTINGS.items():
+            existing = db.get(SystemSetting, key)
+            if existing is None:
+                db.add(SystemSetting(key=key, value=value, description=description))
+        db.commit()
+    finally:
+        db.close()

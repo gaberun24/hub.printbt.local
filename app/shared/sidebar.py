@@ -178,6 +178,13 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
                 visible=lambda u: u.is_admin,
             ),
             NavItem(
+                key="admin_email_accounts",
+                label="Email fiókok",
+                href="/admin/email-accounts",
+                icon=_ICON_MAIL,
+                visible=lambda u: u.is_admin,
+            ),
+            NavItem(
                 key="admin_rendelo_categories",
                 label="Kategóriák",
                 href="/admin/rendelo/categories",

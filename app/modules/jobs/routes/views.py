@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi import Request as FastAPIRequest
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import or_, select
@@ -33,6 +33,7 @@ from app.modules.jobs.services import (
     mark_job_delivered,
     recompute_job_status,
 )
+from app.shared.config import settings
 from app.shared.db import get_db
 from app.shared.dependencies import current_user
 from app.shared.models import (
@@ -373,6 +374,515 @@ def _log_event(
     )
 
 
+# ───────────────────────── workshop ─────────────────────────
+
+
+@router.get("/workshop", response_class=HTMLResponse)
+def jobs_workshop(
+    request: FastAPIRequest,
+    machine: str | None = Query(None),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """Műhely nézet: összes nyitott task kártyaként, gép-szűrővel."""
+    base_q = (
+        select(JobTask)
+        .join(Job, JobTask.job_id == Job.id)
+        .options(
+            selectinload(JobTask.job).selectinload(Job.customer),
+            selectinload(JobTask.job).selectinload(Job.intake_user),
+            selectinload(JobTask.assigned_to),
+        )
+        .where(
+            JobTask.status.in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]),
+            Job.deleted_at.is_(None),
+            Job.status.in_([
+                JobStatus.MUHELYBEN,
+                JobStatus.GRAFIKAN,
+                JobStatus.FELVETT,
+                JobStatus.KESZ_LATVANY,
+                JobStatus.UGYFEL_JOVAHAGYAS_VAR,
+            ]),
+        )
+        .order_by(Job.is_urgent.desc(), Job.deadline.asc())
+    )
+
+    all_tasks: list[JobTask] = db.execute(base_q).scalars().all()
+
+    counts: dict[str, int] = {}
+    for t in all_tasks:
+        tt = str(t.task_type)
+        counts[tt] = counts.get(tt, 0) + 1
+    machine_counts = sorted(counts.items(), key=lambda x: -x[1])
+
+    tasks = [t for t in all_tasks if str(t.task_type) == machine] if machine else all_tasks
+
+    return templates.TemplateResponse(
+        request,
+        "jobs/workshop.html",
+        {
+            "user": user,
+            "title": "Műhely",
+            "topbar_title": "Műhely",
+            "topbar_subtitle": f"{len(tasks)} feladat",
+            "tasks": tasks,
+            "total_count": len(all_tasks),
+            "machine_counts": machine_counts,
+            "active_machine": machine,
+            **sidebar_context(db, user, active_key="jobs_workshop"),
+        },
+    )
+
+
+# ───────────────────────── inbox ─────────────────────────
+
+
+def _visible_account_ids(db: Session, user: User) -> list[int]:
+    """A user számára látható email-fiók ID-k listája.
+
+    Logika: egy fiók látható ha:
+      - nincs hozzá viewer rendelve (közös fiók, mindenki látja), VAGY
+      - a user a fiók viewer-ei között van
+    """
+    from app.modules.jobs.email_models import EmailAccount
+
+    # Közös fiókok (nincs viewer hozzárendelve)
+    shared_ids = (
+        db.execute(
+            select(EmailAccount.id).where(
+                EmailAccount.active.is_(True),
+                ~EmailAccount.viewers.any(),
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    # User-hez rendelt fiókok
+    assigned_ids = (
+        db.execute(
+            select(EmailAccount.id).where(
+                EmailAccount.active.is_(True),
+                EmailAccount.viewers.any(User.id == user.id),
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    return list(set(shared_ids) | set(assigned_ids))
+
+
+
+def _get_thread(db: Session, email) -> list:
+    """Egy email thread-jének összes üzenete időrendben."""
+    from app.modules.jobs.email_models import IncomingEmail
+
+    thread_key = email.thread_id or email.message_id
+    if not thread_key:
+        return [email]
+
+    msgs = list(
+        db.execute(
+            select(IncomingEmail)
+            .options(selectinload(IncomingEmail.attachments))
+            .where(
+                or_(
+                    IncomingEmail.thread_id == thread_key,
+                    IncomingEmail.message_id == thread_key,
+                    IncomingEmail.id == email.id,
+                ),
+                IncomingEmail.purged_at.is_(None),
+            )
+            .order_by(IncomingEmail.received_at.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if not msgs:
+        return [email]
+    seen = set()
+    unique = []
+    for m in msgs:
+        if m.id not in seen:
+            seen.add(m.id)
+            unique.append(m)
+    return unique
+
+
+def _visible_accounts_list(db: Session, visible_account_ids: list[int]) -> list:
+    """Visible email fiókok listája a compose dropdown-hoz."""
+    from app.modules.jobs.email_models import EmailAccount
+
+    if not visible_account_ids:
+        return []
+    return list(
+        db.execute(
+            select(EmailAccount).where(EmailAccount.id.in_(visible_account_ids))
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _inbox_search_filter(q: str):
+    """ILIKE keresés feladó, cím, tárgy és body-ban."""
+    from app.modules.jobs.email_models import IncomingEmail
+
+    pattern = f"%{q}%"
+    return or_(
+        IncomingEmail.from_name.ilike(pattern),
+        IncomingEmail.from_address.ilike(pattern),
+        IncomingEmail.subject.ilike(pattern),
+        IncomingEmail.body_text.ilike(pattern),
+    )
+
+
+@router.get("/inbox", response_class=HTMLResponse)
+def jobs_inbox(
+    request: FastAPIRequest,
+    tab: str = Query("work"),
+    q: str = Query(""),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """Bejövő posta — 5 tabes inbox nézet, keresővel."""
+    from app.modules.jobs.email_models import EmailCategory, IncomingEmail
+
+    valid_tabs = {c.value for c in EmailCategory}
+    active_tab = tab if tab in valid_tabs else "work"
+    search_q = q.strip()
+
+    visible_account_ids = _visible_account_ids(db, user)
+
+    base = select(IncomingEmail).where(
+        IncomingEmail.purged_at.is_(None),
+        IncomingEmail.account_id.in_(visible_account_ids) if visible_account_ids else True,
+    )
+
+    if search_q:
+        base = base.where(_inbox_search_filter(search_q))
+
+    all_emails = (
+        db.execute(base.order_by(IncomingEmail.received_at.desc()))
+        .scalars()
+        .all()
+    )
+
+    counts: dict[str, int] = {c.value: 0 for c in EmailCategory}
+    for em in all_emails:
+        cat = str(em.effective_category) if em.effective_category else "other"
+        counts[cat] = counts.get(cat, 0) + 1
+
+    # Ha keresünk, ne szűrjünk tabra — mutassuk az összeset
+    if search_q:
+        filtered = all_emails
+        active_tab = ""
+    else:
+        filtered = [
+            em
+            for em in all_emails
+            if (str(em.effective_category) if em.effective_category else "other") == active_tab
+        ]
+
+
+    return templates.TemplateResponse(
+        request,
+        "jobs/inbox.html",
+        {
+            "user": user,
+            "title": "Bejövő posta",
+            "topbar_title": "Bejövő posta",
+            "topbar_subtitle": f"{len(filtered)} email",
+            "emails": filtered,
+            "selected": filtered[0] if filtered else None,
+            "selected_id": filtered[0].id if filtered else None,
+            "thread": _get_thread(db, filtered[0]) if filtered else [],
+            "total_count": len(all_emails),
+            "counts": counts,
+            "active_tab": active_tab,
+            "search_q": search_q,
+            "smtp_configured": bool(settings.smtp_host),
+            "visible_accounts": _visible_accounts_list(db, visible_account_ids),
+            **sidebar_context(db, user, active_key="jobs_inbox"),
+        },
+    )
+
+
+@router.get("/inbox/{email_id}", response_class=HTMLResponse)
+def jobs_inbox_detail(
+    email_id: int,
+    request: FastAPIRequest,
+    tab: str = Query("work"),
+    q: str = Query(""),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """Inbox email részletek — bal oldali lista + jobb oldali detail."""
+    from app.modules.jobs.email_models import (
+        EmailCategory,
+        IncomingEmail,
+    )
+
+    valid_tabs = {c.value for c in EmailCategory}
+    active_tab = tab if tab in valid_tabs else "work"
+    search_q = q.strip()
+
+    visible_account_ids = _visible_account_ids(db, user)
+
+    selected = db.execute(
+        select(IncomingEmail)
+        .options(selectinload(IncomingEmail.attachments))
+        .where(IncomingEmail.id == email_id)
+    ).scalar_one_or_none()
+
+    if selected is None:
+        raise HTTPException(404, "Email nem található.")
+
+    if visible_account_ids and selected.account_id not in visible_account_ids:
+        raise HTTPException(403, "Nincs hozzáférésed ehhez az emailhez.")
+
+    if not selected.is_read:
+        selected.is_read = True
+        db.commit()
+
+    thread = _get_thread(db, selected)
+
+    base = select(IncomingEmail).where(
+        IncomingEmail.purged_at.is_(None),
+        IncomingEmail.account_id.in_(visible_account_ids) if visible_account_ids else True,
+    )
+
+    if search_q:
+        base = base.where(_inbox_search_filter(search_q))
+
+    all_emails = (
+        db.execute(base.order_by(IncomingEmail.received_at.desc()))
+        .scalars()
+        .all()
+    )
+
+    counts: dict[str, int] = {c.value: 0 for c in EmailCategory}
+    for em in all_emails:
+        cat = str(em.effective_category) if em.effective_category else "other"
+        counts[cat] = counts.get(cat, 0) + 1
+
+    if search_q:
+        filtered = all_emails
+        active_tab = ""
+    else:
+        filtered = [
+            em
+            for em in all_emails
+            if (str(em.effective_category) if em.effective_category else "other") == active_tab
+        ]
+
+
+    return templates.TemplateResponse(
+        request,
+        "jobs/inbox.html",
+        {
+            "user": user,
+            "title": "Bejövő posta",
+            "topbar_title": "Bejövő posta",
+            "topbar_subtitle": selected.subject or "(nincs tárgy)",
+            "emails": filtered,
+            "selected": selected,
+            "selected_id": selected.id,
+            "thread": thread,
+            "total_count": len(all_emails),
+            "counts": counts,
+            "active_tab": active_tab,
+            "search_q": search_q,
+            "smtp_configured": bool(settings.smtp_host),
+            "visible_accounts": _visible_accounts_list(db, visible_account_ids),
+            **sidebar_context(db, user, active_key="jobs_inbox"),
+        },
+    )
+
+
+async def _read_upload_files(files: list[UploadFile]) -> list[tuple[str, bytes]]:
+    """Upload fájlok beolvasása (filename, bytes) tuple-ökbe."""
+    result = []
+    for f in files:
+        if f.filename and f.size and f.size > 0:
+            data = await f.read()
+            result.append((f.filename, data))
+    return result
+
+
+@router.post("/inbox/{email_id}/reply")
+async def inbox_reply(
+    email_id: int,
+    to_address: str = Form(...),
+    subject: str = Form(...),
+    body: str = Form(...),
+    attachments: list[UploadFile] = File(default=[]),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Válasz küldése egy bejövő emailre."""
+    from app.modules.jobs.email_models import IncomingEmail
+    from app.modules.jobs.email_sender import send_email
+
+    email = db.execute(
+        select(IncomingEmail).where(IncomingEmail.id == email_id)
+    ).scalar_one_or_none()
+    if email is None:
+        raise HTTPException(404, "Email nem található.")
+
+    visible_ids = _visible_account_ids(db, user)
+    if visible_ids and email.account_id not in visible_ids:
+        raise HTTPException(403, "Nincs hozzáférésed ehhez az emailhez.")
+
+    account = email.account
+    file_list = await _read_upload_files(attachments)
+
+    try:
+        msg_id = send_email(
+            account.label,
+            account.email_address,
+            to_address.strip(),
+            subject.strip(),
+            body,
+            in_reply_to=email.message_id,
+            references=email.message_id,
+            attachments=file_list,
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Email küldés sikertelen: {exc}") from exc
+
+    _save_sent_email(
+        db, account, user, to_address.strip(), subject.strip(), body, msg_id,
+        in_reply_to=email.message_id, thread_id=email.thread_id or email.message_id,
+    )
+
+    tab = str(email.effective_category or "work")
+    return RedirectResponse(
+        url=f"/jobs/inbox/{email_id}?tab={tab}", status_code=303
+    )
+
+
+@router.post("/inbox/compose")
+async def inbox_compose(
+    to_address: str = Form(...),
+    subject: str = Form(...),
+    body: str = Form(...),
+    account_id: int = Form(...),
+    attachments: list[UploadFile] = File(default=[]),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Új email küldése egy választott fiókból."""
+    from app.modules.jobs.email_models import EmailAccount
+    from app.modules.jobs.email_sender import send_email
+
+    account = db.get(EmailAccount, account_id)
+    if account is None:
+        raise HTTPException(404, "Email fiók nem található.")
+
+    visible_ids = _visible_account_ids(db, user)
+    if visible_ids and account.id not in visible_ids:
+        raise HTTPException(403, "Nincs hozzáférésed ehhez a fiókhoz.")
+
+    file_list = await _read_upload_files(attachments)
+
+    try:
+        msg_id = send_email(
+            account.label,
+            account.email_address,
+            to_address.strip(),
+            subject.strip(),
+            body,
+            attachments=file_list,
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Email küldés sikertelen: {exc}") from exc
+
+    _save_sent_email(
+        db, account, user, to_address.strip(), subject.strip(), body, msg_id,
+    )
+
+    return RedirectResponse(url="/jobs/inbox", status_code=303)
+
+
+def _save_sent_email(
+    db: Session,
+    account,
+    user: User,
+    to_address: str,
+    subject: str,
+    body: str,
+    message_id: str,
+    *,
+    in_reply_to: str | None = None,
+    thread_id: str | None = None,
+) -> None:
+    """Elküldött email mentése a DB-be a beszélgetés-szál követéséhez."""
+    from app.modules.jobs.email_models import IncomingEmail
+
+    sent = IncomingEmail(
+        account_id=account.id,
+        message_id=message_id,
+        from_address=account.email_address,
+        from_name=account.label,
+        to_address=to_address,
+        subject=subject,
+        body_text=body,
+        received_at=utcnow(),
+        in_reply_to=in_reply_to,
+        thread_id=thread_id or message_id,
+        is_outgoing=True,
+        sent_by_user_id=user.id,
+        is_read=True,
+    )
+    db.add(sent)
+    db.commit()
+
+
+@router.post("/inbox/{email_id}/recategorize")
+def inbox_recategorize(
+    email_id: int,
+    category: str = Form(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Email manuális átsorolása másik kategóriába."""
+    from app.modules.jobs.email_models import EmailCategory, IncomingEmail
+
+    email = db.get(IncomingEmail, email_id)
+    if email is None:
+        raise HTTPException(404, "Email nem található.")
+
+    # Jogosultság-ellenőrzés
+    visible_account_ids = _visible_account_ids(db, user)
+    if visible_account_ids and email.account_id not in visible_account_ids:
+        raise HTTPException(403, "Nincs hozzáférésed ehhez az emailhez.")
+
+    try:
+        new_cat = EmailCategory(category)
+    except ValueError:
+        raise HTTPException(400, f"Érvénytelen kategória: {category}")  # noqa: B904
+
+    old_cat = str(email.effective_category or "—")
+    email.manual_category = new_cat
+    email.manual_category_by_id = user.id
+    db.add(
+        AuditLog(
+            entity_type=AuditEntityType.EMAIL,
+            entity_id=email.id,
+            action="recategorize",
+            old_value=old_cat,
+            new_value=str(new_cat),
+            user_id=user.id,
+        )
+    )
+    db.commit()
+    return RedirectResponse(
+        url=f"/jobs/inbox/{email_id}?tab={category}", status_code=303
+    )
+
+
 @router.get("/{public_id}", response_class=HTMLResponse)
 def jobs_detail(
     public_id: str,
@@ -449,6 +959,7 @@ def _audit_job(
 def task_claim(
     public_id: str,
     task_id: int,
+    next: str | None = Form(None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -475,13 +986,15 @@ def task_claim(
         )
         _audit_job(db, user, job, "status_change", old="felvett", new=str(new_status))
     db.commit()
-    return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+    redirect_url = next if next and next.startswith("/jobs/workshop") else f"/jobs/{job.public_id}"
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 @router.post("/{public_id}/tasks/{task_id}/done")
 def task_done(
     public_id: str,
     task_id: int,
+    next: str | None = Form(None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -491,7 +1004,6 @@ def task_done(
     if task.completed_at is None:
         task.completed_at = utcnow()
     if task.assigned_to_user_id is None:
-        # Aki done-ra teszi, az legyen rögzítve a felelős
         task.assigned_to_user_id = user.id
     _log_event(
         db,
@@ -512,13 +1024,15 @@ def task_done(
         )
         _audit_job(db, user, job, "status_change", old=old_status, new=str(new_status))
     db.commit()
-    return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+    redirect_url = next if next and next.startswith("/jobs/workshop") else f"/jobs/{job.public_id}"
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 @router.post("/{public_id}/tasks/{task_id}/release")
 def task_release(
     public_id: str,
     task_id: int,
+    next: str | None = Form(None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -535,7 +1049,8 @@ def task_release(
         {"task_id": task.id, "task_type": str(task.task_type)},
     )
     db.commit()
-    return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+    redirect_url = next if next and next.startswith("/jobs/workshop") else f"/jobs/{job.public_id}"
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 # ───────────────────────── job state ─────────────────────────

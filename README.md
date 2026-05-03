@@ -62,6 +62,7 @@ Frontend      Jinja2 + htmx (CDN, nincs build pipeline)
 Auth          session cookie + argon2id, meghívásos regisztráció
 Email         imap_tools (IMAP poller, asyncio)
 AI            Google Gemini API (gemini-2.5-flash)
+Vírusszűrő    ClamAV (clamd daemon + pyclamd) — email csatolmányok
 PDF           WeasyPrint (HTML+CSS → A4)
 Worker        külön systemd service (IMAP poll + Corel preview watcher)
 Notifikáció   in-page toast + Web Audio ding (htmx polling vagy SSE)
@@ -257,6 +258,7 @@ A teljes Műhely-spec, korábban külön doksiban. Lényegi pontjai:
 **Email integráció.**
 - 4 IMAP fiók pollozása percenként (3× grafikus + 1× közös műhely)
 - Csatolmányok mentése `/opt/hub/uploads/inbox/YYYY-MM-DD/feladó-email/`
+- ClamAV vírusszűrés minden csatolmányon (fertőzött → karantén, piros jelzés az UI-n)
 - Gemini előszűrés (`gemini-2.5-flash`): `work` / `quote_request` / `spam` / `other`
 - Ismert ügyfél (`customers.email` match) felülírja a Gemini-t → `work`
 - 4-tab inbox UI: Munka / Árajánlat / Egyéb / Spam
@@ -432,9 +434,11 @@ Ez telepíti:
 - nginx
 - sqlite3
 - avahi-daemon (mDNS, hogy `hub.printbt.local` is megy LAN-on)
+- ClamAV (`clamav-daemon` + `clamav-freshclam`) — email csatolmányok vírusszűrése
 - WeasyPrint rendszerfüggőségei (`libpango`, `libcairo`, ...)
 - restic
 - létrehozza a `hub` rendszerusert (no-shell) és az `/opt/hub/` könyvtárat
+- `freshclam` frissíti a vírus-definíciókat, `clamd` daemon elindul
 
 ### 4) App telepítése
 

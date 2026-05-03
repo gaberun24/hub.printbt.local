@@ -243,8 +243,44 @@ def _task_type_hu(value: str) -> str:
     return _TASK_TYPE_LABELS.get(str(value), str(value))
 
 
+_TASK_TYPE_ICONS = {
+    "uv_print": "UV\nNYO",
+    "co2_laser": "CO2\nLZR",
+    "fiber_laser": "FIB\nLZR",
+    "dtf_print": "DTF\nNYO",
+    "dtf_press": "DTF\nPRS",
+    "mug_press": "BGR\nPRS",
+    "engrave_manual": "GRV\nKÉZ",
+    "stamp": "BLY\nGYR",
+    "business_card": "NÉV\nJGY",
+    "sticker": "MAT\nRCA",
+    "large_format": "NGY\nFRM",
+    "other": "EGY\nÉB",
+}
+
+
+def _task_type_icon(value: str) -> str:
+    raw = _TASK_TYPE_ICONS.get(str(value), "?\n?")
+    return raw.replace("\n", "<br/>")
+
+
+_EMAIL_CAT_LABELS = {
+    "work": "munka",
+    "quote_request": "árajánlat",
+    "supplier": "szállító",
+    "other": "egyéb",
+    "spam": "spam",
+}
+
+
+def _email_cat_hu(value: str) -> str:
+    return _EMAIL_CAT_LABELS.get(str(value), str(value))
+
+
 templates.env.globals["now"] = _now
 templates.env.filters["has_flag"] = _has_flag
 templates.env.filters["role_short"] = _role_short
 templates.env.filters["job_type_hu"] = _job_type_hu
 templates.env.filters["task_type_hu"] = _task_type_hu
+templates.env.filters["task_type_icon"] = _task_type_icon
+templates.env.filters["email_cat_hu"] = _email_cat_hu

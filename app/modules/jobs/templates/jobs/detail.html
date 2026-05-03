@@ -1,6 +1,10 @@
 {% extends "app.html" %}
 
 {% block topbar_action %}
+  <a href="/sheet/{{ job.public_id }}" class="btn" style="margin-right: 6px;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    Munkalap
+  </a>
   <a href="/jobs" class="btn">Vissza a listához</a>
 {% endblock %}
 
@@ -17,8 +21,9 @@
           <div class="job-hero-meta">
             <span class="status-pill {{ job.status|string|status_hu_class }}">{{ job.status|string|status_hu }}</span>
             <span class="reseller-badge" style="background: var(--info-soft); color: var(--info-ink); font-size: 10px;">{{ job.job_type|string|job_type_hu }}</span>
-            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
-              felvette: {{ job.intake_user.name.split()[0] }} ·
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle); display: inline-flex; align-items: center; gap: 4px;">
+              <span class="avatar" style="width: 18px; height: 18px; font-size: 8px; display: inline-flex;{% if job.intake_user.avatar_color %} background: {{ job.intake_user.avatar_color }};{% endif %}">{{ job.intake_user.avatar_initials or job.intake_user.name|initials }}</span>
+              {{ job.intake_user.name.split()[0] }} ·
               {% if job.intake_channel == 'email' %}email
               {% elif job.intake_channel == 'workshop_dropoff' %}műhely-behozta
               {% elif job.intake_channel == 'phone' %}telefon

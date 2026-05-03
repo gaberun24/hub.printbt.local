@@ -209,7 +209,214 @@ def invites_revoke(
     return RedirectResponse(url="/admin/invites", status_code=303)
 
 
+# ───────────────────────── email accounts ─────────────────────────
+
+
+def _email_accounts_ctx(
+    request: FastAPIRequest,
+    user: User,
+    db: Session,
+    *,
+    test_account_id: int | None = None,
+    test_ok: bool = False,
+    test_result: str | None = None,
+) -> dict:
+    """Közös context az email-fiókok admin oldalához."""
+    from app.modules.jobs.email_models import EmailAccount
+
+    accounts = db.execute(select(EmailAccount).order_by(EmailAccount.id)).scalars().all()
+    all_users = db.execute(select(User).where(User.active.is_(True)).order_by(User.name)).scalars().all()
+    return {
+        "user": user,
+        "title": "Email fiókok",
+        "topbar_title": "Email fiókok",
+        "accounts": accounts,
+        "all_users": all_users,
+        "test_account_id": test_account_id,
+        "test_ok": test_ok,
+        "test_result": test_result,
+        **sidebar_context(db, user, active_key="admin_email_accounts"),
+    }
+
+
+@router.get("/email-accounts", response_class=HTMLResponse)
+def email_accounts_list(
+    request: FastAPIRequest,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "admin/email_accounts.html",
+        _email_accounts_ctx(request, user, db),
+    )
+
+
+@router.post("/email-accounts/new")
+def email_accounts_new(
+    request: FastAPIRequest,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    label: str = Form(...),
+    email_address: str = Form(...),
+    imap_host: str = Form(...),
+    imap_port: int = Form(993),
+    imap_user: str = Form(...),
+    imap_password: str = Form(...),
+    imap_use_ssl: str | None = Form(None),
+    smtp_host: str = Form(""),
+    smtp_port: int = Form(587),
+    smtp_user: str = Form(""),
+    smtp_password: str = Form(""),
+    smtp_use_tls: str | None = Form(None),
+    viewer_ids: list[str] = Form([]),
+) -> Response:
+    from app.modules.jobs.email_crypto import encrypt_password
+    from app.modules.jobs.email_models import EmailAccount
+
+    account = EmailAccount(
+        label=label.strip(),
+        email_address=email_address.strip().lower(),
+        imap_host=imap_host.strip(),
+        imap_port=imap_port,
+        imap_user=imap_user.strip(),
+        imap_password_encrypted=encrypt_password(imap_password),
+        imap_use_ssl=imap_use_ssl == "on",
+        smtp_host=smtp_host.strip() or None,
+        smtp_port=smtp_port,
+        smtp_user=smtp_user.strip() or None,
+        smtp_password_encrypted=encrypt_password(smtp_password) if smtp_password else None,
+        smtp_use_tls=smtp_use_tls == "on",
+        active=True,
+    )
+    db.add(account)
+    db.flush()
+
+    # Viewer user-ek hozzárendelése
+    _set_viewers(db, account, viewer_ids)
+    db.commit()
+    return RedirectResponse(url="/admin/email-accounts", status_code=303)
+
+
+@router.post("/email-accounts/{account_id}/update")
+def email_accounts_update(
+    account_id: int,
+    request: FastAPIRequest,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    label: str = Form(...),
+    email_address: str = Form(...),
+    imap_host: str = Form(...),
+    imap_port: int = Form(993),
+    imap_user: str = Form(...),
+    imap_password: str = Form(""),
+    active: str | None = Form(None),
+    imap_use_ssl: str | None = Form(None),
+    smtp_host: str = Form(""),
+    smtp_port: int = Form(587),
+    smtp_user: str = Form(""),
+    smtp_password: str = Form(""),
+    smtp_use_tls: str | None = Form(None),
+    viewer_ids: list[str] = Form([]),
+) -> Response:
+    from app.modules.jobs.email_crypto import encrypt_password
+    from app.modules.jobs.email_models import EmailAccount
+
+    account = db.get(EmailAccount, account_id)
+    if account is None:
+        raise HTTPException(404, "Email fiók nem található.")
+
+    account.label = label.strip()
+    account.email_address = email_address.strip().lower()
+    account.imap_host = imap_host.strip()
+    account.imap_port = imap_port
+    account.imap_user = imap_user.strip()
+    account.imap_use_ssl = imap_use_ssl == "on"
+    account.active = active == "on"
+
+    account.smtp_host = smtp_host.strip() or None
+    account.smtp_port = smtp_port
+    account.smtp_user = smtp_user.strip() or None
+    account.smtp_use_tls = smtp_use_tls == "on"
+
+    if imap_password:
+        account.imap_password_encrypted = encrypt_password(imap_password)
+
+    if smtp_password:
+        account.smtp_password_encrypted = encrypt_password(smtp_password)
+
+    _set_viewers(db, account, viewer_ids)
+    db.commit()
+    return RedirectResponse(url="/admin/email-accounts", status_code=303)
+
+
+@router.post("/email-accounts/{account_id}/delete")
+def email_accounts_delete(
+    account_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Email fiók törlése — CASCADE törli a viewer-eket és az emaileket is."""
+    from app.modules.jobs.email_models import EmailAccount
+
+    account = db.get(EmailAccount, account_id)
+    if account is None:
+        raise HTTPException(404, "Email fiók nem található.")
+    db.delete(account)
+    db.commit()
+    return RedirectResponse(url="/admin/email-accounts", status_code=303)
+
+
+@router.post("/email-accounts/{account_id}/test")
+def email_accounts_test(
+    account_id: int,
+    request: FastAPIRequest,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """IMAP kapcsolat tesztelése — bejelentkezik és kilép."""
+    from app.modules.jobs.email_crypto import decrypt_password
+    from app.modules.jobs.email_models import EmailAccount
+
+    account = db.get(EmailAccount, account_id)
+    if account is None:
+        raise HTTPException(404, "Email fiók nem található.")
+
+    try:
+        password = decrypt_password(account.imap_password_encrypted)
+        from imap_tools import MailBox
+
+        with MailBox(account.imap_host, account.imap_port).login(
+            account.imap_user, password
+        ) as mb:
+            folder_count = len(mb.folder.list())
+            test_result = f"✓ Sikeres! {folder_count} mappa elérhető."
+            test_ok = True
+    except Exception as exc:
+        test_result = f"✗ Hiba: {exc}"
+        test_ok = False
+
+    return templates.TemplateResponse(
+        request,
+        "admin/email_accounts.html",
+        _email_accounts_ctx(
+            request, user, db,
+            test_account_id=account_id, test_ok=test_ok, test_result=test_result,
+        ),
+    )
+
+
 # ───────────────────────── helpers ─────────────────────────
+
+
+def _set_viewers(db: Session, account, viewer_ids: list[str]) -> None:
+    """Email fiók viewer user-ek beállítása a checkbox-listából."""
+    uid_ints = [int(v) for v in viewer_ids if v.strip().isdigit()]
+    if uid_ints:
+        users = db.execute(select(User).where(User.id.in_(uid_ints))).scalars().all()
+        account.viewers = list(users)
+    else:
+        account.viewers = []
 
 
 def _base_url(request: FastAPIRequest) -> str:

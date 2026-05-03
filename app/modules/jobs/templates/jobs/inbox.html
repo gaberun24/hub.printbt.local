@@ -1,0 +1,347 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/jobs" class="btn">Munkák listája</a>
+{% endblock %}
+
+{% block main %}
+<div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px;">
+  <h1 class="greeting" style="margin-bottom: 0;">Bejövő <em>posta</em></h1>
+  <div style="display: flex; align-items: center; gap: 12px;">
+    {% if smtp_configured %}
+      <button type="button" class="btn btn-accent" onclick="openCompose()" style="font-size: 12px; padding: 7px 14px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Új üzenet
+      </button>
+    {% endif %}
+  <form method="get" action="/jobs/inbox" class="inbox-search-form">
+    <input type="text" name="q" value="{{ search_q }}" placeholder="Keresés feladó, cím, tárgy..."
+           class="form-input inbox-search-input">
+    {% if search_q %}
+      <a href="/jobs/inbox" class="inbox-search-clear" title="Keresés törlése">&times;</a>
+    {% endif %}
+  </form>
+  </div>
+</div>
+<div class="greeting-date">{{ total_count }} email · legújabbak elől</div>
+
+<div class="tabs" style="margin-top: 24px;">
+  <a href="/jobs/inbox?tab=work"
+     class="tab {% if active_tab == 'work' %}active{% endif %}" style="text-decoration: none; color: inherit;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    Munka
+    <span class="tab-count">{{ counts.work }}</span>
+  </a>
+  <a href="/jobs/inbox?tab=quote_request"
+     class="tab {% if active_tab == 'quote_request' %}active{% endif %}" style="text-decoration: none; color: inherit;">
+    Árajánlat
+    <span class="tab-count">{{ counts.quote_request }}</span>
+  </a>
+  <a href="/jobs/inbox?tab=supplier"
+     class="tab {% if active_tab == 'supplier' %}active{% endif %}" style="text-decoration: none; color: inherit;">
+    Szállító
+    <span class="tab-count">{{ counts.supplier }}</span>
+  </a>
+  <a href="/jobs/inbox?tab=other"
+     class="tab {% if active_tab == 'other' %}active{% endif %}" style="text-decoration: none; color: inherit;">
+    Egyéb
+    <span class="tab-count">{{ counts.other }}</span>
+  </a>
+  <a href="/jobs/inbox?tab=spam"
+     class="tab {% if active_tab == 'spam' %}active{% endif %}" style="text-decoration: none; color: inherit;">
+    Spam
+    <span class="tab-count">{{ counts.spam }}</span>
+  </a>
+</div>
+
+<div class="inbox">
+  <div class="inbox-list">
+    {% if not emails %}
+      <div style="padding: 40px 20px; text-align: center; color: var(--ink-subtle); font-size: 13px;">
+        {% if active_tab == 'spam' %}Nincs spam email.
+        {% elif active_tab == 'work' %}Nincs beérkezett munka-email.
+        {% elif active_tab == 'quote_request' %}Nincs árajánlat-kérés.
+        {% elif active_tab == 'supplier' %}Nincs szállítói email.
+        {% else %}Nincs email ebben a kategóriában.
+        {% endif %}
+        <div style="margin-top: 12px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle);">
+          Az IMAP poller percenként szinkronizálja a beérkező fiókokat.
+        </div>
+      </div>
+    {% endif %}
+    {% for email in emails %}
+      <a href="/jobs/inbox/{{ email.id }}{% if active_tab != 'work' %}?tab={{ active_tab }}{% endif %}"
+         class="inbox-item {% if selected_id == email.id %}selected{% endif %} {% if not email.is_read %}unread{% endif %}"
+         style="text-decoration: none; color: inherit;">
+        <div class="inbox-item-header">
+          <div class="inbox-from">{{ email.from_name or email.from_address }}</div>
+          <div class="inbox-time">{{ email.received_at|hu_date("rel") }}</div>
+        </div>
+        <div class="inbox-email">{{ email.from_address }}</div>
+        <div class="inbox-subject">
+          {{ email.subject or "(nincs tárgy)" }}
+          {% if email.attachment_count > 0 %} 📎{% endif %}
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+
+  <div class="inbox-detail">
+    {% if selected %}
+      <div class="inbox-detail-subject">{{ selected.subject or "(nincs tárgy)" }}</div>
+
+      {% for msg in thread %}
+        <div class="thread-message {% if msg.is_outgoing %}outgoing{% endif %} {% if msg.id == selected.id %}current{% endif %}">
+          <div class="thread-msg-header">
+            <div class="thread-msg-from">
+              {% if msg.is_outgoing %}
+                <span class="outgoing-tag">ELKÜLDVE</span>
+                {{ msg.from_name or msg.from_address }} → {{ msg.to_address }}
+              {% else %}
+                {{ msg.from_name or msg.from_address }}
+                {% if msg.matched_customer_id %}
+                  <span class="known-customer-tag">ISMERT ÜGYFÉL</span>
+                {% endif %}
+              {% endif %}
+            </div>
+            <div class="thread-msg-time">{{ msg.received_at|hu_date("time") }}</div>
+          </div>
+
+          {% if msg.gemini_summary and not msg.is_outgoing %}
+            <div class="gemini-card">
+              <div class="gemini-label">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L9.5 9.5 0 12l9.5 2.5L12 24l2.5-9.5L24 12l-9.5-2.5z"/></svg>
+                {% if msg.classified_by == 'gemini' %}Gemini
+                {% elif msg.classified_by == 'rule_customer' %}Ismert ügyfél
+                {% elif msg.classified_by == 'rule_supplier' %}Szállító domain
+                {% elif msg.classified_by == 'rule_spam' %}Spam szűrő
+                {% elif msg.classified_by == 'manual' %}Kézi
+                {% else %}Auto{% endif %}
+                · {{ msg.effective_category|email_cat_hu }}
+                {% if msg.confidence %} · {{ (msg.confidence * 100)|int }}%{% endif %}
+              </div>
+              <div class="gemini-summary">{{ msg.gemini_summary }}</div>
+            </div>
+          {% endif %}
+
+          <div class="inbox-body">
+            {% if msg.body_text %}
+              {% for paragraph in msg.body_text.split("\n\n") %}
+                <p>{{ paragraph }}</p>
+              {% endfor %}
+            {% else %}
+              <p style="color: var(--ink-subtle); font-style: italic;">Az email törzse nem elérhető.</p>
+            {% endif %}
+          </div>
+
+          {% if msg.attachments %}
+            <div class="attachments">
+              {% for a in msg.attachments %}
+                <div class="attachment-chip {% if a.scan_status == 'infected' %}attachment-infected{% endif %}">
+                  <div class="file-icon {% if a.scan_status == 'infected' %}file-icon-danger{% endif %}">
+                    {% if a.scan_status == 'infected' %}!{% else %}{{ a.filename.rsplit(".", 1)[-1][:3]|upper if "." in a.filename else "?" }}{% endif %}
+                  </div>
+                  <div class="file-info">
+                    <div class="file-name">{{ a.filename }}</div>
+                    <div class="file-size">
+                      {% if a.scan_status == 'infected' %}
+                        <span class="scan-infected">FERTŐZÖTT: {{ a.scan_result }}</span>
+                      {% elif a.scan_status == 'clean' %}
+                        <span class="scan-clean">✓ tiszta</span>
+                      {% elif a.scan_status == 'skipped' %}
+                        <span class="scan-skipped">nem szkennelt</span>
+                      {% elif a.scan_status == 'error' %}
+                        <span class="scan-error">szkennelési hiba</span>
+                      {% else %}
+                        {% if a.size_bytes %}
+                          {{ "{:,.0f}".format(a.size_bytes / 1024).replace(",", " ") }} KB
+                        {% endif %}
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+
+      <div class="inbox-actions">
+        {% if smtp_configured %}
+          <button type="button" class="btn btn-accent" onclick="openReply()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+            Válasz
+          </button>
+        {% endif %}
+        {% if selected.effective_category not in ['spam', 'supplier'] %}
+          <a href="/jobs/new?from_email={{ selected.id }}" class="btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Munkává alakítás
+          </a>
+        {% endif %}
+        <form method="post" action="/jobs/inbox/{{ selected.id }}/recategorize" class="inbox-recat">
+          {% if active_tab != 'work' %}
+            <button type="submit" name="category" value="work" class="btn btn-sm">→ Munka</button>
+          {% endif %}
+          {% if active_tab != 'quote_request' %}
+            <button type="submit" name="category" value="quote_request" class="btn btn-sm">→ Árajánlat</button>
+          {% endif %}
+          {% if active_tab != 'supplier' %}
+            <button type="submit" name="category" value="supplier" class="btn btn-sm btn-ghost">→ Szállító</button>
+          {% endif %}
+          {% if active_tab != 'other' %}
+            <button type="submit" name="category" value="other" class="btn btn-sm btn-ghost">→ Egyéb</button>
+          {% endif %}
+          {% if active_tab != 'spam' %}
+            <button type="submit" name="category" value="spam" class="btn btn-sm btn-ghost">→ Spam</button>
+          {% endif %}
+        </form>
+      </div>
+    {% else %}
+      <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--ink-subtle); font-size: 13px;">
+        {% if emails %}
+          Válassz egy emailt a listából.
+        {% else %}
+          <div style="text-align: center;">
+            <div style="font-size: 32px; margin-bottom: 12px;">📭</div>
+            <div>Nincs beérkezett email ebben a kategóriában.</div>
+            <div style="font-family: var(--font-mono); font-size: 10px; margin-top: 8px;">
+              IMAP poller konfiguráció: Rendszer → Email fiókok
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if smtp_configured %}
+<div id="compose-popup" class="compose-popup" style="display: none;">
+  <div class="compose-header">
+    <span class="compose-title" id="compose-title">Új üzenet</span>
+    <div style="display: flex; gap: 4px;">
+      <button type="button" class="compose-btn" onclick="toggleMinimize()" title="Kis méret">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button type="button" class="compose-btn" onclick="closeCompose()" title="Bezárás">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="compose-body" id="compose-body">
+    <form id="compose-form" method="post" enctype="multipart/form-data">
+      <div class="compose-field">
+        <label>Feladó</label>
+        <select name="account_id" id="compose-account" class="compose-input">
+          {% for acc in visible_accounts %}
+            <option value="{{ acc.id }}">{{ acc.label }} &lt;{{ acc.email_address }}&gt;</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="compose-field">
+        <label>Címzett</label>
+        <input type="email" name="to_address" id="compose-to" class="compose-input" required>
+      </div>
+      <div class="compose-field">
+        <label>Tárgy</label>
+        <input type="text" name="subject" id="compose-subject" class="compose-input" required>
+      </div>
+      <textarea name="body" id="compose-body-text" class="compose-textarea" placeholder="Üzenet szövege..." required></textarea>
+      <div class="compose-field" style="border-bottom: none;">
+        <label>Csatolmány</label>
+        <input type="file" name="attachments" id="compose-files" multiple
+               style="font-size: 12px; color: var(--ink-muted);">
+      </div>
+      <div class="compose-footer">
+        <button type="submit" class="btn btn-accent">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          Küldés
+        </button>
+        <button type="button" class="btn btn-ghost" onclick="closeCompose()">Elvetés</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<script>
+(function() {
+  let idle = true;
+  const input = document.querySelector('.inbox-search-input');
+  if (input) {
+    input.addEventListener('focus', () => idle = false);
+    input.addEventListener('blur', () => idle = true);
+  }
+  setInterval(() => {
+    if (idle && !document.hidden) location.reload();
+  }, 30000);
+})();
+
+function openReply() {
+  var popup = document.getElementById('compose-popup');
+  var form = document.getElementById('compose-form');
+  var title = document.getElementById('compose-title');
+  var to = document.getElementById('compose-to');
+  var subject = document.getElementById('compose-subject');
+  var body = document.getElementById('compose-body-text');
+  var account = document.getElementById('compose-account');
+
+  {% if selected %}
+  form.action = '/jobs/inbox/{{ selected.id }}/reply';
+  title.textContent = 'Válasz';
+  to.value = '{{ selected.from_address|e }}';
+  var origSubject = '{{ (selected.subject or "")|e }}';
+  subject.value = origSubject.startsWith('Re:') ? origSubject : 'Re: ' + origSubject;
+
+  var origFrom = {{ (selected.from_name or selected.from_address)|tojson }};
+  var origDate = '{{ selected.received_at|hu_date("time") }}';
+  var quoted = {{ (selected.body_text[:2000]|replace("\n", "\n> ") if selected.body_text else "")|tojson }};
+  body.value = '\n\n---\n' + origDate + ', ' + origFrom + ' írta:\n\n> ' + quoted;
+
+  {% for acc in visible_accounts %}
+    if ({{ acc.id }} === {{ selected.account_id }}) {
+      account.value = '{{ acc.id }}';
+    }
+  {% endfor %}
+  {% endif %}
+
+  popup.style.display = 'flex';
+  popup.classList.remove('minimized');
+  document.getElementById('compose-body').style.display = '';
+  to.focus();
+}
+
+function openCompose() {
+  var popup = document.getElementById('compose-popup');
+  var form = document.getElementById('compose-form');
+  var title = document.getElementById('compose-title');
+  document.getElementById('compose-to').value = '';
+  document.getElementById('compose-subject').value = '';
+  document.getElementById('compose-body-text').value = '';
+
+  form.action = '/jobs/inbox/compose';
+  title.textContent = 'Új üzenet';
+
+  popup.style.display = 'flex';
+  popup.classList.remove('minimized');
+  document.getElementById('compose-body').style.display = '';
+  document.getElementById('compose-to').focus();
+}
+
+function closeCompose() {
+  document.getElementById('compose-popup').style.display = 'none';
+}
+
+function toggleMinimize() {
+  var popup = document.getElementById('compose-popup');
+  var body = document.getElementById('compose-body');
+  if (popup.classList.contains('minimized')) {
+    popup.classList.remove('minimized');
+    body.style.display = '';
+  } else {
+    popup.classList.add('minimized');
+    body.style.display = 'none';
+  }
+}
+</script>
+{% endblock %}

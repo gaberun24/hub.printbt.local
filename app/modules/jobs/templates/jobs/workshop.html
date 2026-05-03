@@ -1,0 +1,100 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/jobs" class="btn">Munkák listája</a>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Műhely</h1>
+<div class="greeting-date">{{ total_count }} feladat · határidő szerint rendezve</div>
+
+<div class="machine-filter" style="margin-top: 24px;">
+  <a href="/jobs/workshop"
+     class="filter-chip {% if not active_machine %}active{% endif %}">
+    Mind <span class="count">{{ total_count }}</span>
+  </a>
+  {% for tt, count in machine_counts %}
+    <a href="/jobs/workshop?machine={{ tt }}"
+       class="filter-chip {% if active_machine == tt %}active{% endif %}">
+      {{ tt|task_type_hu }} <span class="count">{{ count }}</span>
+    </a>
+  {% endfor %}
+</div>
+
+{% if not tasks %}
+  <div style="padding: 40px 20px; text-align: center; color: var(--ink-subtle);">
+    Nincs nyitott műhely-feladat{% if active_machine %} ebben a kategóriában{% endif %}.
+  </div>
+{% else %}
+  <div class="workshop-grid">
+    {% for task in tasks %}
+      {% set job = task.job %}
+      <div class="task-card
+                  {% if job.is_urgent %}urgent{% endif %}
+                  {% if task.status|string == 'in_progress' %}in-progress{% endif %}">
+
+        {% if task.status|string == 'in_progress' %}
+          <div class="in-progress-badge">FOLYAMATBAN</div>
+        {% endif %}
+
+        <div class="task-card-header">
+          <div class="machine-icon">{{ task.task_type|string|task_type_icon|safe }}</div>
+          <div>
+            <a href="/jobs/{{ job.public_id }}" class="task-job-id" style="color: inherit; text-decoration: none;">
+              {{ job.public_id[:3] }}-{{ job.public_id[3:] }}
+            </a>
+            <div class="task-card-customer">
+              {{ job.customer.name }}
+              {% if job.customer.customer_type == 'reseller' %}<span class="reseller-badge" style="font-size:9px;">VTL</span>{% endif %}
+            </div>
+          </div>
+          <div class="task-card-deadline {% if job.is_urgent %}urgent{% endif %}">
+            {% if job.is_urgent %}⚠ {% endif %}{{ job.deadline|hu_date("short") }}
+          </div>
+        </div>
+
+        {% if task.instructions %}
+          <div class="task-card-desc">
+            {{ task.instructions }}
+            {% if task.quantity and task.quantity > 1 %} · <strong>{{ task.quantity }} db</strong>{% endif %}
+          </div>
+        {% elif task.quantity and task.quantity > 1 %}
+          <div class="task-card-desc"><strong>{{ task.quantity }} db</strong></div>
+        {% endif %}
+
+        <div class="task-card-meta">
+          {% if task.assigned_to %}
+            <span>{{ task.assigned_to.name.split()[0] }} dolgozik rajta</span>
+          {% else %}
+            <span>nincs hozzárendelve</span>
+          {% endif %}
+        </div>
+
+        <div class="task-card-actions">
+          {% if task.status|string == 'in_progress' and task.assigned_to_user_id == user.id %}
+            <form method="post" action="/jobs/{{ job.public_id }}/tasks/{{ task.id }}/done" style="display:contents;">
+              <input type="hidden" name="next" value="/jobs/workshop{% if active_machine %}?machine={{ active_machine }}{% endif %}">
+              <button type="submit" class="btn btn-accent">Kész</button>
+            </form>
+            <form method="post" action="/jobs/{{ job.public_id }}/tasks/{{ task.id }}/release" style="display:contents;">
+              <input type="hidden" name="next" value="/jobs/workshop{% if active_machine %}?machine={{ active_machine }}{% endif %}">
+              <button type="submit" class="btn">Elenged</button>
+            </form>
+          {% elif task.status|string == 'in_progress' %}
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle); align-self: center;">
+              {{ task.assigned_to.name.split()[0] }} dolgozik rajta
+            </span>
+            <a href="/jobs/{{ job.public_id }}" class="btn">Részletek</a>
+          {% else %}
+            <form method="post" action="/jobs/{{ job.public_id }}/tasks/{{ task.id }}/claim" style="display:contents;">
+              <input type="hidden" name="next" value="/jobs/workshop{% if active_machine %}?machine={{ active_machine }}{% endif %}">
+              <button type="submit" class="btn btn-primary">Megcsinálom</button>
+            </form>
+            <a href="/jobs/{{ job.public_id }}" class="btn">Részletek</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

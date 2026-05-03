@@ -114,38 +114,6 @@ def _placeholder_response(
     )
 
 
-@router.get("/jobs/workshop", response_class=HTMLResponse)
-def jobs_workshop(
-    request: Request,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    return _placeholder_response(
-        request,
-        user,
-        db,
-        title="Műhely",
-        phase="Fázis 2 — task-listák gép szerint",
-        active_key="jobs_workshop",
-    )
-
-
-@router.get("/jobs/inbox", response_class=HTMLResponse)
-def jobs_inbox(
-    request: Request,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    return _placeholder_response(
-        request,
-        user,
-        db,
-        title="Bejövő posta",
-        phase="Fázis 4 — IMAP poller + Gemini előszűrés",
-        active_key="jobs_inbox",
-    )
-
-
 @router.get("/jobs/quotes", response_class=HTMLResponse)
 def jobs_quotes(
     request: Request,
@@ -178,17 +146,3 @@ def stock_placeholder(
     )
 
 
-@router.get("/sheet", response_class=HTMLResponse)
-def sheet_placeholder(
-    request: Request,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    return _placeholder_response(
-        request,
-        user,
-        db,
-        title="Munkalap",
-        phase="Fázis 3 — WeasyPrint A4 generálás",
-        active_key="data_sheet",
-    )

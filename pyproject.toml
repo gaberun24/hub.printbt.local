@@ -15,6 +15,7 @@ dependencies = [
     "pillow==11.0.0",
     "itsdangerous==2.2.0",
     "tzdata==2024.2",
+    "weasyprint>=68.0",
 ]
 
 [project.optional-dependencies]
@@ -27,7 +28,9 @@ dev = [
 # igényelnek, amiket nem mindig kell felhúzni (pl. CI lint-only futáshoz).
 email = [
     "imap-tools==1.10.0",
-    "google-genai==0.3.0",
+    "google-genai>=1.0,<2",
+    "cryptography>=42.0",
+    "pyclamd>=0.4.0",
 ]
 pdf = [
     "weasyprint==63.1",

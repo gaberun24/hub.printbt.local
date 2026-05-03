@@ -26,6 +26,12 @@
           {% if j.tasks|length > 4 %}<span class="task-chip">+{{ j.tasks|length - 4 }}</span>{% endif %}
         </div>
       {% endif %}
+      {% if j.intake_user %}
+        <div class="avatar" style="width: 22px; height: 22px; font-size: 9px; margin-left: auto; flex-shrink: 0;{% if j.intake_user.avatar_color %} background: {{ j.intake_user.avatar_color }};{% endif %}"
+             title="{{ j.intake_user.name }}">
+          {{ j.intake_user.avatar_initials or j.intake_user.name|initials }}
+        </div>
+      {% endif %}
     </div>
   </div>
 </a>

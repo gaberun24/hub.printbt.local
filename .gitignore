@@ -22,6 +22,7 @@ dist/
 data/
 uploads/
 test_previews/
+*.db
 
 # Konfig
 .env

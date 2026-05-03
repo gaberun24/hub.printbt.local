@@ -15,6 +15,7 @@ from alembic import context
 # Hub modellek importálása — regisztrálja a Base.metadata-t.
 # Minden modul-saját modellt is importálni kell, hogy az autogenerate
 # az ő tábláit is észlelje.
+from app.modules.jobs import email_models  # noqa: F401
 from app.modules.jobs import models as jobs_models  # noqa: F401
 from app.modules.rendelo import models as rendelo_models  # noqa: F401
 from app.shared import models  # noqa: F401

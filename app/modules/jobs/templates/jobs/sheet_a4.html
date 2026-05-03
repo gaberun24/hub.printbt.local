@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8"/>
+  <title>Munkalap · {{ job.public_id[:3] }}-{{ job.public_id[3:] }}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&display=swap');
+
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: #FFF;
+      color: #1F1B16;
+    }
+    .a4-sheet {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 12mm 14mm;
+      display: flex;
+      flex-direction: column;
+      page-break-after: always;
+    }
+
+    /* Header */
+    .sheet-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      padding-bottom: 14px;
+      border-bottom: 2px solid #1F1B16;
+    }
+    .sheet-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 56px;
+      letter-spacing: 0.02em;
+      line-height: 1;
+    }
+    .sheet-customer-block { margin-top: 6px; }
+    .sheet-customer {
+      font-family: 'Fraunces', serif;
+      font-weight: 600;
+      font-size: 20px;
+      letter-spacing: -0.01em;
+    }
+    .sheet-contact {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #4A4742;
+      margin-top: 2px;
+    }
+
+    /* Deadline box */
+    .deadline-box {
+      border: 2px solid #1F1B16;
+      padding: 10px 14px;
+      text-align: right;
+      flex-shrink: 0;
+      min-width: 200px;
+    }
+    .deadline-box.urgent { border-color: #C5301F; }
+    .deadline-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #6B6358;
+    }
+    .deadline-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: 0.02em;
+      margin-top: 2px;
+    }
+    .urgent-stamp {
+      background: #C5301F;
+      color: #FFF;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 0.18em;
+      padding: 4px 10px;
+      margin-top: 8px;
+      display: inline-block;
+      transform: rotate(-2deg);
+      border: 2px solid #C5301F;
+    }
+    .deadline-price {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #4A4742;
+      margin-top: 6px;
+    }
+
+    /* Preview area */
+    .sheet-preview {
+      flex: 1;
+      margin: 16px 0;
+      min-height: 300px;
+      border: 1.5px solid #1F1B16;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #FAF7EE;
+      position: relative;
+    }
+    .preview-corner {
+      position: absolute;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 600;
+      color: #4A4742;
+      letter-spacing: 0.05em;
+    }
+    .preview-corner.tl { top: 6px; left: 6px; }
+    .preview-corner.br { bottom: 6px; right: 6px; }
+    .preview-placeholder {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #6B6358;
+      text-align: center;
+    }
+
+    /* Instructions grid */
+    .sheet-instructions {
+      display: flex;
+      gap: 24px;
+      padding: 14px 0;
+      border-top: 1px solid #1F1B16;
+      border-bottom: 1px solid #1F1B16;
+    }
+    .sheet-instructions > div { flex: 1; }
+    .sheet-section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #6B6358;
+      margin-bottom: 8px;
+    }
+    .sheet-tasks { list-style: none; }
+    .sheet-tasks li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 13px;
+    }
+    .sheet-checkbox {
+      width: 14px; height: 14px;
+      border: 1.5px solid #1F1B16;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .sheet-note {
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .sheet-note strong { font-weight: 700; }
+
+    /* Footer */
+    .sheet-footer {
+      margin-top: 12px;
+      padding-top: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #6B6358;
+      letter-spacing: 0.02em;
+    }
+    .sheet-footer-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+    }
+    .sheet-footer-row strong { color: #1F1B16; font-weight: 600; }
+    .sheet-handnote {
+      margin-top: 10px;
+      border-top: 1px dashed #6B6358;
+      padding-top: 10px;
+    }
+    .sheet-handnote-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      color: #6B6358;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .sheet-handnote-line {
+      border-bottom: 1px solid #C9C0AC;
+      height: 22px;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="a4-sheet">
+
+    <div class="sheet-header">
+      <div>
+        <div class="sheet-id">{{ job.public_id[:3] }}-{{ job.public_id[3:] }}</div>
+        <div class="sheet-customer-block">
+          <div class="sheet-customer">{{ job.customer.name }}</div>
+          <div class="sheet-contact">
+            {% if job.customer.phone %}{{ job.customer.phone }}{% endif %}
+            {% if job.customer.phone and job.customer.email %} · {% endif %}
+            {% if job.customer.email %}{{ job.customer.email }}{% endif %}
+            {% if job.customer.customer_type == 'reseller' %}
+              · VTL{% if job.customer.discount_pct %} (−{{ job.customer.discount_pct }}%){% endif %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="deadline-box {% if job.is_urgent %}urgent{% endif %}">
+        <div class="deadline-label">Határidő</div>
+        <div class="deadline-value">{{ job.deadline|hu_date("short") }}</div>
+        {% if job.is_urgent %}
+          <div class="urgent-stamp">SÜRGŐS</div>
+        {% endif %}
+        {% if job.price_huf %}
+          <div class="deadline-price">{{ "{:,}".format(job.price_huf).replace(",", " ") }} Ft</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="sheet-preview">
+      <span class="preview-corner tl">LÁTVÁNY · —</span>
+      <span class="preview-corner br">—</span>
+      <div class="preview-placeholder">
+        Látvány feltöltése után<br/>itt jelenik meg a preview
+      </div>
+    </div>
+
+    <div class="sheet-instructions">
+      <div>
+        <div class="sheet-section-label">Taskok / Lépések</div>
+        <ul class="sheet-tasks">
+          {% for task in job.tasks %}
+            <li>
+              <div class="sheet-checkbox"></div>
+              <div>
+                {{ task.task_type|string|task_type_hu }}
+                {% if task.quantity and task.quantity > 1 %} · {{ task.quantity }} db{% endif %}
+                {% if task.instructions %} · {{ task.instructions }}{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div>
+        <div class="sheet-section-label">Leírás / Megjegyzés</div>
+        <div class="sheet-note">
+          {% if job.description %}
+            {{ job.description|replace("\n", "<br/>")|safe }}
+          {% else %}
+            <span style="color: #6B6358; font-style: italic;">(nincs leírás)</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet-footer">
+      <div class="sheet-footer-row">
+        <span>
+          <strong>Fájl:</strong>
+          {% if job.source_file_path %}{{ job.source_file_path }}{% else %}—{% endif %}
+        </span>
+        <span>oldal 1/1</span>
+      </div>
+      <div class="sheet-footer-row">
+        <span>
+          <strong>Felvette:</strong> {{ job.intake_user.name.split()[0] }} ·
+          {{ job.created_at|hu_date("time") }} ·
+          {% if job.intake_channel == 'email' %}email
+          {% elif job.intake_channel == 'workshop_dropoff' %}műhely-behozta
+          {% elif job.intake_channel == 'phone' %}telefon
+          {% else %}személyes{% endif %}
+        </span>
+        <span><strong>ID:</strong> {{ job.public_id[:3] }}-{{ job.public_id[3:] }}</span>
+      </div>
+
+      <div class="sheet-handnote">
+        <div class="sheet-handnote-label">Műhely megjegyzés (kézzel)</div>
+        <div class="sheet-handnote-line"></div>
+        <div class="sheet-handnote-line"></div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

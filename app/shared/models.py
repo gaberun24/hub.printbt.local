@@ -87,6 +87,10 @@ class User(Base):
     is_orderer: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Avatar testreszabás
+    avatar_initials: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    avatar_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     force_password_change: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -268,6 +272,20 @@ DEFAULT_SYSTEM_SETTINGS: dict[str, tuple[str, str]] = {
         "90",
         "Soft-deletált munkák tárolási ideje napokban. Ennél régebbieket "
         "a worker permanensen purge-elheti (Fázis 4-től).",
+    ),
+    "email.supplier_domains": (
+        "dpd.hu,gls-group.eu,foxpost.hu,mpl.hu,billingo.hu,szamlazz.hu",
+        "Ismert szállítói email domain-ek vesszővel elválasztva. "
+        "Ezekről érkező emailek automatikusan a Szállító tabra kerülnek, "
+        "Gemini nélkül.",
+    ),
+    "email.spam_purge_days": (
+        "7",
+        "Spam emailek automatikus törlése ennyi nap után.",
+    ),
+    "email.supplier_purge_days": (
+        "30",
+        "Szállítói emailek automatikus törlése ennyi nap után.",
     ),
 }
 

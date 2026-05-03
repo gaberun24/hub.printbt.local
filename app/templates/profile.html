@@ -1,0 +1,93 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/" class="btn">Vissza</a>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Saját <em>beállítások</em></h1>
+<div class="greeting-date">{{ user.name }} · {{ user.email }}</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px; max-width: 900px;">
+
+  {# ── Avatar testreszabás ── #}
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Avatar</div>
+    </div>
+    <div class="panel-body">
+      <form method="post" action="/profile/avatar">
+        <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px;">
+          <div class="avatar" id="avatar-preview"
+               style="width: 64px; height: 64px; font-size: 24px; {% if user.avatar_color %}background: {{ user.avatar_color }};{% endif %}">
+            {{ user.avatar_initials or user.name|initials }}
+          </div>
+          <div>
+            <div style="font-weight: 600; font-size: 14px;">{{ user.name }}</div>
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">{{ user.role_label }}</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Betűk (2 karakter)</label>
+          <input class="form-input" name="initials" value="{{ user.avatar_initials or user.name|initials }}"
+                 maxlength="4" style="max-width: 100px; text-transform: uppercase; text-align: center; font-weight: 700; font-size: 16px;"
+                 oninput="document.getElementById('avatar-preview').textContent = this.value.toUpperCase() || '?'">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Szín</label>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <label style="cursor: pointer; position: relative; width: 40px; height: 40px;">
+              <input type="color" name="color" id="avatar-color-picker"
+                     value="{{ user.avatar_color or '#E8622B' }}"
+                     style="position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: none; border-radius: 50%; cursor: pointer; background: none;"
+                     oninput="document.getElementById('avatar-preview').style.background = this.value;">
+            </label>
+            <button type="button" class="btn btn-ghost" style="font-size: 11px; padding: 4px 10px;"
+                    onclick="var c = document.getElementById('avatar-color-picker'); c.value = '#E8622B'; c.dispatchEvent(new Event('input')); document.getElementById('avatar-preview').style.background = 'linear-gradient(135deg, var(--accent), var(--warning))';">
+              Alapértelmezett
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Mentés</button>
+        {% if avatar_saved %}
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--success); margin-left: 8px;">Mentve!</span>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+
+  {# ── Jelszóváltás ── #}
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Jelszó módosítás</div>
+    </div>
+    <div class="panel-body">
+      <form method="post" action="/profile/password">
+        <div class="form-group">
+          <label class="form-label">Jelenlegi jelszó</label>
+          <input class="form-input" type="password" name="current_password" required autocomplete="current-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Új jelszó</label>
+          <input class="form-input" type="password" name="new_password" required minlength="8" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Új jelszó újra</label>
+          <input class="form-input" type="password" name="confirm_password" required minlength="8" autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Jelszó módosítás</button>
+        {% if pw_error %}
+          <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent); margin-top: 8px;">{{ pw_error }}</div>
+        {% endif %}
+        {% if pw_saved %}
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--success); margin-left: 8px;">Jelszó módosítva!</span>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,215 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/admin/users" class="btn">Userek</a>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Email <em>fiókok</em></h1>
+<div class="greeting-date">IMAP poller konfiguráció · {{ accounts|length }} fiók</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px; max-width: 1100px;">
+
+  {# ── Meglévő fiókok ── #}
+  {% for acc in accounts %}
+    <div class="panel">
+      <div class="panel-header" style="display: flex; align-items: center; justify-content: space-between;">
+        <div class="panel-title">{{ acc.label }}</div>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          {% if acc.active %}
+            <span style="font-family: var(--font-mono); font-size: 10px; color: var(--success);">AKTÍV</span>
+          {% else %}
+            <span style="font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle);">INAKTÍV</span>
+          {% endif %}
+          {% if acc.last_poll_at %}
+            <span style="font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle);">
+              utolsó poll: {{ acc.last_poll_at|hu_date("rel") }}
+            </span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="panel-body">
+        <form method="post" action="/admin/email-accounts/{{ acc.id }}/update">
+          <div class="form-group">
+            <label class="form-label">Név</label>
+            <input class="form-input" name="label" value="{{ acc.label }}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email cím</label>
+            <input class="form-input" type="email" name="email_address" value="{{ acc.email_address }}" required>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px;">
+            <div class="form-group">
+              <label class="form-label">IMAP szerver</label>
+              <input class="form-input" name="imap_host" value="{{ acc.imap_host }}" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Port</label>
+              <input class="form-input" type="number" name="imap_port" value="{{ acc.imap_port }}" style="width: 80px;" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">IMAP felhasználó</label>
+            <input class="form-input" name="imap_user" value="{{ acc.imap_user }}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">IMAP jelszó</label>
+            <input class="form-input" type="password" name="imap_password" placeholder="(változatlan ha üresen hagyod)">
+          </div>
+          <details style="margin: 12px 0 8px; border: 1px solid var(--border); border-radius: 6px; padding: 0 12px;">
+            <summary style="cursor: pointer; padding: 8px 0; font-size: 12px; font-weight: 600; color: var(--ink-muted);">SMTP beállítások (küldés)</summary>
+            <div style="padding-bottom: 12px;">
+              <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px;">
+                <div class="form-group">
+                  <label class="form-label">SMTP szerver</label>
+                  <input class="form-input" name="smtp_host" value="{{ acc.smtp_host or '' }}" placeholder="smtp.printbt.hu">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Port</label>
+                  <input class="form-input" type="number" name="smtp_port" value="{{ acc.smtp_port }}" style="width: 80px;">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">SMTP user <span style="font-size: 10px; color: var(--ink-subtle);">(üresen = IMAP user)</span></label>
+                <input class="form-input" name="smtp_user" value="{{ acc.smtp_user or '' }}" placeholder="{{ acc.imap_user }}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">SMTP jelszó</label>
+                <input class="form-input" type="password" name="smtp_password" placeholder="{% if acc.smtp_password_encrypted %}(változatlan){% else %}(nincs beállítva){% endif %}">
+              </div>
+              <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+                <input type="checkbox" name="smtp_use_tls" {% if acc.smtp_use_tls %}checked{% endif %}>
+                STARTTLS
+              </label>
+            </div>
+          </details>
+          <div class="form-group">
+            <label class="form-label">Ki látja?</label>
+            {% if not acc.viewers %}
+              <div style="font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle); margin-bottom: 6px;">
+                Senki nincs kiválasztva → mindenki látja (közös fiók)
+              </div>
+            {% endif %}
+            <div style="display: flex; flex-wrap: wrap; gap: 6px 14px;">
+              {% set viewer_ids = acc.viewers|map(attribute='id')|list %}
+              {% for u in all_users %}
+                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px;">
+                  <input type="checkbox" name="viewer_ids" value="{{ u.id }}"
+                         {% if u.id in viewer_ids %}checked{% endif %}>
+                  {{ u.name }}
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+              <input type="checkbox" name="active" {% if acc.active %}checked{% endif %}>
+              Aktív
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; margin-left: 16px;">
+              <input type="checkbox" name="imap_use_ssl" {% if acc.imap_use_ssl %}checked{% endif %}>
+              SSL
+            </label>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 8px; align-items: center;">
+            <button type="submit" class="btn btn-primary">Mentés</button>
+            <button type="submit" formaction="/admin/email-accounts/{{ acc.id }}/test" class="btn">Teszt</button>
+            <button type="submit" formaction="/admin/email-accounts/{{ acc.id }}/delete"
+                    class="btn" style="margin-left: auto; color: var(--accent); font-size: 11px;"
+                    onclick="return confirm('Biztosan törlöd a „{{ acc.label }}" fiókot?\nEz törli az összes hozzá tartozó emailt is!')">Törlés</button>
+          </div>
+          {% if test_result and test_account_id == acc.id %}
+            <div style="font-family: var(--font-mono); font-size: 11px; margin-top: 8px;
+                        color: {% if test_ok %}var(--success){% else %}var(--accent){% endif %};">
+              {{ test_result }}
+            </div>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+
+  {# ── Új fiók hozzáadás ── #}
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">+ Új fiók</div>
+    </div>
+    <div class="panel-body">
+      <form method="post" action="/admin/email-accounts/new">
+        <div class="form-group">
+          <label class="form-label">Név (pl. "Grafikus 1" vagy "Közös")</label>
+          <input class="form-input" name="label" required placeholder="Grafikus 1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email cím</label>
+          <input class="form-input" type="email" name="email_address" required placeholder="nev@printbt.hu">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px;">
+          <div class="form-group">
+            <label class="form-label">IMAP szerver</label>
+            <input class="form-input" name="imap_host" required placeholder="imap.printbt.hu">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Port</label>
+            <input class="form-input" type="number" name="imap_port" value="993" style="width: 80px;" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">IMAP felhasználó</label>
+          <input class="form-input" name="imap_user" required placeholder="nev@printbt.hu">
+        </div>
+        <div class="form-group">
+          <label class="form-label">IMAP jelszó</label>
+          <input class="form-input" type="password" name="imap_password" required>
+        </div>
+        <details style="margin: 12px 0 8px; border: 1px solid var(--border); border-radius: 6px; padding: 0 12px;">
+          <summary style="cursor: pointer; padding: 8px 0; font-size: 12px; font-weight: 600; color: var(--ink-muted);">SMTP beállítások (küldés)</summary>
+          <div style="padding-bottom: 12px;">
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px;">
+              <div class="form-group">
+                <label class="form-label">SMTP szerver</label>
+                <input class="form-input" name="smtp_host" placeholder="smtp.printbt.hu">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Port</label>
+                <input class="form-input" type="number" name="smtp_port" value="587" style="width: 80px;">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">SMTP user <span style="font-size: 10px; color: var(--ink-subtle);">(üresen = IMAP user)</span></label>
+              <input class="form-input" name="smtp_user" placeholder="">
+            </div>
+            <div class="form-group">
+              <label class="form-label">SMTP jelszó</label>
+              <input class="form-input" type="password" name="smtp_password">
+            </div>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+              <input type="checkbox" name="smtp_use_tls" checked>
+              STARTTLS
+            </label>
+          </div>
+        </details>
+        <div class="form-group">
+          <label class="form-label">Ki látja? <span style="font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle);">(üres = mindenki)</span></label>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px 14px;">
+            {% for u in all_users %}
+              <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px;">
+                <input type="checkbox" name="viewer_ids" value="{{ u.id }}">
+                {{ u.name }}
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; gap: 16px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;">
+            <input type="checkbox" name="imap_use_ssl" checked>
+            SSL
+          </label>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top: 8px;">Hozzáadás</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
