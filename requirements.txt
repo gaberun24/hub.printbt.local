@@ -1,0 +1,3 @@
+# Single source of truth: pyproject.toml. Ez a fájl thin wrapper hogy a
+# setup-app.sh és a CI is `pip install -r`-rel mehessen.
+-e .

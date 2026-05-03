@@ -1,0 +1,40 @@
+# Forrás-anyagok (lokális reference, nincs verziókezelve)
+_source/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Adat és uploadok (futás közben generált tartalom)
+data/
+uploads/
+test_previews/
+
+# Konfig
+.env
+.env.local
+*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logok
+*.log
+logs/

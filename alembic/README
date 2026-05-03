@@ -1,0 +1,10 @@
+Hub adatbázis-migrációk (Alembic).
+
+Új migráció létrehozása:
+    alembic revision --autogenerate -m "rövid leírás"
+
+Migrációk futtatása:
+    alembic upgrade head
+
+A `init_db()` az app indulásakor és a CLI első parancsokor automatikusan
+felfuttatja a migrációkat, így dev-ben kézzel ritkán kell.

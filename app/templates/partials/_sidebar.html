@@ -1,0 +1,22 @@
+<nav class="sidebar-nav">
+  <div class="sidebar-section-title">Modulok</div>
+  <ul class="sidebar-modules">
+    {% for mod in modules %}
+      <li>
+        <a href="{{ mod.href }}"
+           class="sidebar-module {% if mod.key == active_module %}is-active{% endif %}">
+          <span class="sidebar-module-icon" aria-hidden="true">{{ mod.icon }}</span>
+          <span class="sidebar-module-label">{{ mod.label }}</span>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+
+  {% if user.is_admin %}
+    <div class="sidebar-section-title">Admin</div>
+    <ul class="sidebar-modules">
+      <li><a href="/admin/users" class="sidebar-module">Userek</a></li>
+      <li><a href="/admin/invites" class="sidebar-module">Meghívók</a></li>
+    </ul>
+  {% endif %}
+</nav>

@@ -1,0 +1,76 @@
+[project]
+name = "hub"
+version = "0.1.0"
+description = "Belső munkakövető, igénykezelő és készletnyilvántartó rendszer (PrintBT / Composit Studio)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.115.5",
+    "uvicorn[standard]==0.32.1",
+    "jinja2==3.1.4",
+    "python-multipart==0.0.18",
+    "sqlalchemy==2.0.36",
+    "alembic==1.14.0",
+    "argon2-cffi==23.1.0",
+    "pydantic-settings==2.6.1",
+    "pillow==11.0.0",
+    "itsdangerous==2.2.0",
+    "tzdata==2024.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "ruff==0.8.4",
+    "httpx==0.28.1",
+]
+# Külön telepíthető extra-k. Az IMAP poller és a PDF generátor system-deps-eket
+# igényelnek, amiket nem mindig kell felhúzni (pl. CI lint-only futáshoz).
+email = [
+    "imap-tools==1.10.0",
+    "google-genai==0.3.0",
+]
+pdf = [
+    "weasyprint==63.1",
+]
+worker = [
+    "watchdog==6.0.0",
+]
+
+[project.scripts]
+hub = "app.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["tests*", "_source*", "scripts*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["data", "uploads", ".venv", "venv", "_source", "alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long (formatter handles this)
+    "B008",  # Depends() in defaults — standard FastAPI pattern, false positive here
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block body %}
+<header class="app-header">
+  <div class="brand">
+    <a href="/" class="logo-link">
+      <div class="app-name"><a href="/" style="text-decoration:none;color:inherit">Hub</a></div>
+    </a>
+  </div>
+  <div class="header-right">
+    <button type="button" class="theme-toggle" id="theme-toggle"
+            title="Sötét/világos téma váltás" aria-label="Téma váltás">
+      <span class="theme-toggle-icon theme-toggle-sun" aria-hidden="true">☀</span>
+      <span class="theme-toggle-icon theme-toggle-moon" aria-hidden="true">☾</span>
+    </button>
+    <div class="user-chip">
+      <a href="/profile" class="user-chip-link" title="Saját profil">
+        <div class="avatar">{{ user.name|initials }}</div>
+        <div style="font-size:13px">
+          <strong>{{ user.name }}</strong><br>
+          <span style="color:var(--ink-mute);font-size:11px">{{ user.role_label }}</span>
+        </div>
+      </a>
+      <form method="post" action="/logout">
+        <button type="submit" class="logout-btn">Kilépés</button>
+      </form>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    {% include "partials/_sidebar.html" %}
+  </aside>
+
+  <main class="app-main">
+    {% block main %}{% endblock %}
+  </main>
+</div>
+
+<div class="footnote">{{ user.name }} • <span style="color:var(--accent)">●</span> hub.printbt.local</div>
+
+<div id="toast-container" aria-live="polite"></div>
+{% endblock %}
