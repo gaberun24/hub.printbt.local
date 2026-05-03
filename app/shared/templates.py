@@ -204,6 +204,47 @@ def _role_short(flag: str) -> str:
     return _ROLE_SHORT.get(flag, flag.removeprefix("is_")[:4].upper())
 
 
+_JOB_TYPE_LABELS = {
+    "engraving": "Gravírozás",
+    "sticker_matte": "Matt matrica",
+    "sticker_gloss": "Fényes matrica",
+    "sticker_clear": "Átlátszó matrica",
+    "uv_print": "UV nyomtatás",
+    "engraving_fiber": "Fiber gravír",
+    "engraving_laser": "Lézer gravír",
+    "heat_press": "Vasalás",
+    "other": "Egyéb",
+}
+
+
+def _job_type_hu(value: str) -> str:
+    """`Job.job_type` enum → magyar UI-szöveg."""
+    return _JOB_TYPE_LABELS.get(str(value), str(value))
+
+
+_TASK_TYPE_LABELS = {
+    "uv_print": "UV nyomtatás",
+    "co2_laser": "CO2 lézer",
+    "fiber_laser": "Fiber lézer",
+    "dtf_print": "DTF nyomtatás",
+    "dtf_press": "DTF vasalás",
+    "mug_press": "Bögre press",
+    "engrave_manual": "Gravír (kézi)",
+    "stamp": "Bélyegző",
+    "business_card": "Névjegy",
+    "sticker": "Matrica",
+    "large_format": "Nagyformátum",
+    "other": "Egyéb",
+}
+
+
+def _task_type_hu(value: str) -> str:
+    """`JobTask.task_type` enum → magyar UI-szöveg."""
+    return _TASK_TYPE_LABELS.get(str(value), str(value))
+
+
 templates.env.globals["now"] = _now
 templates.env.filters["has_flag"] = _has_flag
 templates.env.filters["role_short"] = _role_short
+templates.env.filters["job_type_hu"] = _job_type_hu
+templates.env.filters["task_type_hu"] = _task_type_hu

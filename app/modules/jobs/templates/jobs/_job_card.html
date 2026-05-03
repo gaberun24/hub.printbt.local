@@ -8,6 +8,9 @@
       {% if j.customer.customer_type == 'reseller' %}
         <span class="reseller-badge">VTL</span>
       {% endif %}
+      {% if j.job_type and j.job_type|string != 'other' %}
+        <span class="reseller-badge" style="background: var(--info-soft); color: var(--info-ink);">{{ j.job_type|string|job_type_hu }}</span>
+      {% endif %}
     </div>
     <div class="job-desc">{{ j.description or "(nincs leírás)" }}</div>
     <div class="job-meta">

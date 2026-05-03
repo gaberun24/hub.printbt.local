@@ -63,6 +63,26 @@ class TaskType(StrEnum):
     OTHER = "other"
 
 
+class JobType(StrEnum):
+    """A Job egészének fő kategóriája — mit csinálunk az ügyfélnek?
+
+    Ez különbözik a `TaskType`-tól: utóbbi a gyártási lépést írja le,
+    míg a `JobType` az ügyfél szempontjából egységként megjelenő munka
+    típusát (egy "matt matrica" Job-on belül lehet több task: nyomtatás
+    + vágás + csomagolás).
+    """
+
+    ENGRAVING = "engraving"  # gravírozás (generic, kézi vagy CNC)
+    STICKER_MATTE = "sticker_matte"  # matt matrica
+    STICKER_GLOSS = "sticker_gloss"  # fényes matrica
+    STICKER_CLEAR = "sticker_clear"  # átlátszó matrica
+    UV_PRINT = "uv_print"  # UV nyomtatás
+    ENGRAVING_FIBER = "engraving_fiber"  # fiber gravír
+    ENGRAVING_LASER = "engraving_laser"  # lézer gravír (CO2)
+    HEAT_PRESS = "heat_press"  # vasalás (DTF press, sublimation, stb.)
+    OTHER = "other"  # egyéb
+
+
 class TaskStatus(StrEnum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
@@ -90,6 +110,9 @@ class Job(Base):
 
     customer_id: Mapped[int] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    job_type: Mapped[JobType] = mapped_column(
+        String(30), nullable=False, default=JobType.OTHER, index=True
     )
     intake_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     intake_channel: Mapped[IntakeChannel] = mapped_column(String(20), nullable=False)

@@ -14,6 +14,7 @@
           <div class="job-hero-id">{{ job.public_id[:3] }}-{{ job.public_id[3:] }}</div>
           <div class="job-hero-meta">
             <span class="status-pill {{ job.status|string|status_hu_class }}">{{ job.status|string|status_hu }}</span>
+            <span class="reseller-badge" style="background: var(--info-soft); color: var(--info-ink); font-size: 10px;">{{ job.job_type|string|job_type_hu }}</span>
             <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
               felvette: {{ job.intake_user.name.split()[0] }} ·
               {% if job.intake_channel == 'email' %}email
@@ -42,6 +43,10 @@
         <div class="panel-title">Részletek</div>
       </div>
       <div class="panel-body" style="padding: 0 16px;">
+        <div class="detail-row">
+          <div class="detail-label">Típus</div>
+          <div class="detail-value">{{ job.job_type|string|job_type_hu }}</div>
+        </div>
         <div class="detail-row">
           <div class="detail-label">Határidő</div>
           <div class="detail-value {% if job.is_urgent %}deadline-big{% endif %}">

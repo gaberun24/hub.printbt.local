@@ -21,6 +21,7 @@ from app.modules.jobs.models import (
     Job,
     JobStatus,
     JobTask,
+    JobType,
     TaskType,
 )
 from app.modules.jobs.public_id import generate_unique, normalize
@@ -84,8 +85,9 @@ def jobs_list(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
     view: str = Query("own", description="own | pool | all"),
+    job_type: str | None = Query(None, description="job_type szűrés"),
 ) -> HTMLResponse:
-    """Saját munkáim / Közös pool / Mind."""
+    """Saját munkáim / Közös pool / Mind + opcionális job_type szűrés."""
 
     stmt = (
         select(Job)
@@ -111,6 +113,14 @@ def jobs_list(
         view_label = "Minden aktív munka"
         active_key = "jobs_own"
 
+    active_job_type = None
+    if job_type:
+        try:
+            active_job_type = JobType(job_type)
+            stmt = stmt.where(Job.job_type == active_job_type)
+        except ValueError:
+            pass
+
     jobs = list(db.execute(stmt).scalars().all())
     groups = _group_by_status(jobs)
 
@@ -124,6 +134,8 @@ def jobs_list(
             "topbar_subtitle": f"{len(jobs)} aktív munka",
             "view": view,
             "view_label": view_label,
+            "active_job_type": active_job_type.value if active_job_type else None,
+            "job_types": list(JobType),
             "jobs": jobs,
             "groups": groups,
             **sidebar_context(db, user, active_key=active_key),
@@ -159,8 +171,9 @@ def jobs_new_form(
             "customers": customers,
             "prefill_customer": prefill_customer,
             "error": error,
-            "task_types": [t for t in TaskType],
-            "intake_channels": [c for c in IntakeChannel],
+            "job_types": list(JobType),
+            "task_types": list(TaskType),
+            "intake_channels": list(IntakeChannel),
             **sidebar_context(db, user, active_key="jobs_new"),
         },
     )
@@ -183,6 +196,7 @@ def jobs_new_submit(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
     customer_id: int = Form(...),
+    job_type: str = Form("other"),
     deadline: str = Form(...),
     intake_channel: str = Form("personal"),
     is_urgent: str | None = Form(None),
@@ -236,6 +250,11 @@ def jobs_new_submit(
     except ValueError:
         ic = IntakeChannel.PERSONAL
 
+    try:
+        jt = JobType(job_type)
+    except ValueError:
+        jt = JobType.OTHER
+
     # Pool-flag: bekapcsolt = közös pool (assigned_designer_id NULL),
     # kikapcsolt = magamhoz veszem (designer-jog kell hozzá)
     assigned_designer_id = None if pool == "on" or not user.is_designer else user.id
@@ -243,6 +262,7 @@ def jobs_new_submit(
     job = Job(
         public_id=generate_unique(db),
         customer_id=customer.id,
+        job_type=jt,
         intake_user_id=user.id,
         intake_channel=ic,
         assigned_designer_id=assigned_designer_id,

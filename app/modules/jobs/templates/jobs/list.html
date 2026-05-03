@@ -16,11 +16,25 @@
 <div class="greeting-date">{{ jobs|length }} aktív · határidő szerint rendezve</div>
 
 <div class="stock-toolbar" style="margin-top: 24px;">
-  <a href="/jobs?view=own" class="filter-chip {% if view == 'own' %}active{% endif %}">Saját</a>
-  <a href="/jobs?view=pool" class="filter-chip {% if view == 'pool' %}active{% endif %}">Közös pool</a>
+  <a href="/jobs?view=own{% if active_job_type %}&job_type={{ active_job_type }}{% endif %}"
+     class="filter-chip {% if view == 'own' %}active{% endif %}">Saját</a>
+  <a href="/jobs?view=pool{% if active_job_type %}&job_type={{ active_job_type }}{% endif %}"
+     class="filter-chip {% if view == 'pool' %}active{% endif %}">Közös pool</a>
   {% if user.is_admin %}
-    <a href="/jobs?view=all" class="filter-chip {% if view == 'all' %}active{% endif %}">Mind</a>
+    <a href="/jobs?view=all{% if active_job_type %}&job_type={{ active_job_type }}{% endif %}"
+       class="filter-chip {% if view == 'all' %}active{% endif %}">Mind</a>
   {% endif %}
+</div>
+
+<div class="stock-toolbar" style="padding-bottom: 0; border-bottom: none; margin-bottom: 16px;">
+  <span style="font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-subtle); align-self: center; margin-right: 4px;">Típus:</span>
+  <a href="/jobs?view={{ view }}" class="filter-chip {% if not active_job_type %}active{% endif %}">Mind</a>
+  {% for jt in job_types %}
+    <a href="/jobs?view={{ view }}&job_type={{ jt.value }}"
+       class="filter-chip {% if active_job_type == jt.value %}active{% endif %}">
+      {{ jt.value|job_type_hu }}
+    </a>
+  {% endfor %}
 </div>
 
 {% if not jobs %}
