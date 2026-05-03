@@ -67,6 +67,28 @@
       </div>
     </div>
 
+    {% set has_address = customer.postal_code or customer.city or customer.address_line1 or customer.address_line2 %}
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Cím</div>
+      </div>
+      <div class="panel-body" style="font-family: var(--font-mono); font-size: 12px; line-height: 1.7;">
+        {% if has_address %}
+          {% if customer.postal_code or customer.city %}
+            <div>
+              {% if customer.postal_code %}{{ customer.postal_code }}{% endif %}
+              {% if customer.city %}{{ customer.city }}{% endif %}
+            </div>
+          {% endif %}
+          {% if customer.address_line1 %}<div>{{ customer.address_line1 }}</div>{% endif %}
+          {% if customer.address_line2 %}<div>{{ customer.address_line2 }}</div>{% endif %}
+          <div style="color: var(--ink-subtle); margin-top: 6px;">{{ customer.country }}</div>
+        {% else %}
+          <span style="color: var(--ink-subtle);">{{ customer.country }} · cím nincs megadva</span>
+        {% endif %}
+      </div>
+    </div>
+
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">Munkák</div>

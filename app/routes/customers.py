@@ -104,6 +104,11 @@ def customers_new_submit(
     tax_number: str | None = Form(None),
     customer_type: str = Form("retail"),
     discount_pct: int | None = Form(None),
+    country: str = Form("Magyarország"),
+    postal_code: str | None = Form(None),
+    city: str | None = Form(None),
+    address_line1: str | None = Form(None),
+    address_line2: str | None = Form(None),
     notes: str | None = Form(None),
     next: str | None = Form(None),
 ) -> Response:
@@ -132,6 +137,11 @@ def customers_new_submit(
         tax_number=(tax_number or "").strip() or None if lt == LegalType.COMPANY else None,
         customer_type=ct,
         discount_pct=discount_pct if ct == CustomerType.RESELLER else None,
+        country=(country or "Magyarország").strip() or "Magyarország",
+        postal_code=(postal_code or "").strip() or None,
+        city=(city or "").strip() or None,
+        address_line1=(address_line1 or "").strip() or None,
+        address_line2=(address_line2 or "").strip() or None,
         notes=(notes or "").strip() or None,
         created_by_id=user.id,
     )
@@ -201,6 +211,11 @@ def customers_update(
     tax_number: str | None = Form(None),
     customer_type: str = Form("retail"),
     discount_pct: int | None = Form(None),
+    country: str = Form("Magyarország"),
+    postal_code: str | None = Form(None),
+    city: str | None = Form(None),
+    address_line1: str | None = Form(None),
+    address_line2: str | None = Form(None),
     notes: str | None = Form(None),
 ) -> Response:
     _require_customer_access(user)
@@ -226,6 +241,11 @@ def customers_update(
     customer.tax_number = (tax_number or "").strip() or None if lt == LegalType.COMPANY else None
     customer.customer_type = ct
     customer.discount_pct = discount_pct if ct == CustomerType.RESELLER else None
+    customer.country = (country or "Magyarország").strip() or "Magyarország"
+    customer.postal_code = (postal_code or "").strip() or None
+    customer.city = (city or "").strip() or None
+    customer.address_line1 = (address_line1 or "").strip() or None
+    customer.address_line2 = (address_line2 or "").strip() or None
     customer.notes = (notes or "").strip() or None
 
     db.commit()

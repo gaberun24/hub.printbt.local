@@ -59,6 +59,47 @@
   </div>
 </div>
 
+<div style="margin: 20px 0 8px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-subtle);">
+  Cím (opcionális)
+</div>
+
+<div class="form-grid">
+  <div class="form-group">
+    <label class="form-label">Ország</label>
+    <input class="form-input" name="country"
+           value="{{ customer.country if customer else 'Magyarország' }}"
+           placeholder="Magyarország">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Irányítószám</label>
+    <input class="form-input" name="postal_code"
+           value="{{ customer.postal_code if customer and customer.postal_code else '' }}"
+           pattern="\d{4,10}" maxlength="10"
+           placeholder="1234">
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="form-label">Város</label>
+  <input class="form-input" name="city"
+         value="{{ customer.city if customer and customer.city else '' }}"
+         placeholder="Budapest">
+</div>
+
+<div class="form-group">
+  <label class="form-label">Utca, házszám</label>
+  <input class="form-input" name="address_line1"
+         value="{{ customer.address_line1 if customer and customer.address_line1 else '' }}"
+         placeholder="Petőfi utca 12/B">
+</div>
+
+<div class="form-group">
+  <label class="form-label">Emelet, ajtó, egyéb</label>
+  <input class="form-input" name="address_line2"
+         value="{{ customer.address_line2 if customer and customer.address_line2 else '' }}"
+         placeholder="3. em. 12. ajtó · vagy 'hátsó épület'">
+</div>
+
 <div class="form-group">
   <label class="form-label">Belső megjegyzés (opcionális)</label>
   <textarea class="form-textarea" name="notes"

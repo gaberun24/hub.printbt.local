@@ -187,6 +187,18 @@ class Customer(Base):
         String(20), nullable=False, default=CustomerType.RETAIL
     )
     discount_pct: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Cím — minden mező opcionális, az ország kivételével. Magyar default,
+    # struktúrált (nem szabad-szöveges), hogy a későbbi számlázás-integráció
+    # tudjon belőle dolgozni.
+    country: Mapped[str] = mapped_column(String(80), nullable=False, default="Magyarország")
+    postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Utca + házszám egy sorban (pl. "Petőfi utca 12/B")
+    address_line1: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Emelet, ajtó, egyéb (pl. "3. em. 12. ajtó" vagy "Hátsó épület")
+    address_line2: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     created_by_id: Mapped[int | None] = mapped_column(
