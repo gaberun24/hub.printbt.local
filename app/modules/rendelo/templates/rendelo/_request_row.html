@@ -1,0 +1,56 @@
+{# Egy request-row a Rendelő listán — pontosan a hub_mockup.html szerinti
+   grid layout: priority badge / item-name + meta / quantity / status pill / actor.
+   A `r` változó egy Request modell-példány. #}
+<a class="request-row {% if r.status == 'arrived' or r.status == 'cancelled' %}{% endif %}"
+   href="/rendelo/{{ r.id }}"
+   style="text-decoration: none; color: inherit; {% if r.status in ['arrived', 'cancelled'] %}opacity: 0.7;{% endif %}">
+
+  {# A priority chip most a state-ből vezetett: arrived/cancelled = check;
+     ordered = medium számmal; new = high felkiáltójellel. Fázis 1.2-ben
+     jön igazi priority mező. #}
+  {% if r.status in ["arrived", "cancelled"] %}
+    <div class="req-priority low">✓</div>
+  {% elif r.status == "ordered" %}
+    <div class="req-priority medium">2</div>
+  {% else %}
+    <div class="req-priority high">!</div>
+  {% endif %}
+
+  <div>
+    <div class="req-item-name">
+      {% if r.lines %}
+        {{ r.lines[0].title }}{% if r.lines|length > 1 %} <span style="color: var(--ink-subtle); font-weight: 500;">+ {{ r.lines|length - 1 }} további</span>{% endif %}
+      {% else %}
+        {{ r.note or "(nincs leírás)" }}
+      {% endif %}
+    </div>
+    <div class="req-meta">
+      <span style="--cat-color: {{ r.category.color }};" class="rendelo-cat-tag">
+        <span class="cat-dot" aria-hidden="true"></span>{{ r.category.name }}
+      </span>
+      <span>Felvette: {{ r.requested_by.name.split()[0] }} · {{ r.created_at|hu_date("rel") }}</span>
+    </div>
+  </div>
+
+  <div class="req-quantity">
+    {% if r.lines %}
+      {% set qty = r.lines|sum(attribute="qty") %}
+      {{ qty|int if qty == qty|int else qty }}
+      <span class="unit">{{ r.lines[0].unit }}</span>
+    {% else %}
+      —
+    {% endif %}
+  </div>
+
+  <span class="req-status-pill {{ r.status|string|status_hu_class }}">{{ r.status|string|status_hu }}</span>
+
+  <div class="req-actor">
+    {% if r.ordered_by %}
+      <div class="mini-avatar" style="background: linear-gradient(135deg, var(--info), var(--success));">{{ r.ordered_by.name|initials|first }}</div>
+      {{ r.ordered_by.name.split()[0] }}
+    {% else %}
+      <div class="mini-avatar" style="background: linear-gradient(135deg, var(--accent), var(--warning));">·</div>
+      vár
+    {% endif %}
+  </div>
+</a>

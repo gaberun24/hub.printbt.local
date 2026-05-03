@@ -1,14 +1,22 @@
 {% extends "app.html" %}
 
 {% block main %}
-<section class="page-hero">
-  <h1 class="page-title">{{ module_label }}</h1>
-  <p class="page-lead">{{ module_phase }}</p>
-</section>
+<h1 class="greeting" style="margin-bottom: 4px;">{{ module_label }}</h1>
+<div class="greeting-date">{{ module_phase }}</div>
 
-<section class="page-section">
-  <p>Ez a modul még üres. A README roadmap-ben láthatod, hogy melyik fázisban
-  készül el.</p>
-  <p><a href="/" class="btn-secondary">Vissza az áttekintéshez</a></p>
-</section>
+<div class="panel" style="margin-top: 24px; max-width: 640px;">
+  <div class="panel-header">
+    <div class="panel-title">Még nincs implementálva</div>
+  </div>
+  <div class="panel-body">
+    <p style="color: var(--ink-muted); font-size: 14px; line-height: 1.6;">
+      Ez a modul a roadmap szerinti következő fázisokban épül fel.
+      Az áttekintést az <a href="/" style="color: var(--accent); font-weight: 500;">áttekintő oldalon</a>
+      találod, vagy a baloldali sidebarban válts másik nézetre.
+    </p>
+    <p style="color: var(--ink-subtle); font-size: 12px; margin-top: 12px; font-family: var(--font-mono);">
+      A {{ module_label }} fejlesztése a README roadmap szerint történik.
+    </p>
+  </div>
+</div>
 {% endblock %}

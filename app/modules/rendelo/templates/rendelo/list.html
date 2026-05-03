@@ -1,52 +1,87 @@
 {% extends "app.html" %}
 
+{% block topbar_action %}
+  <a href="/rendelo/new" class="btn btn-accent">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Új igény
+  </a>
+{% endblock %}
+
 {% block main %}
-<section class="page-hero">
-  <h1 class="page-title">{{ view_label }}{% if active_category %} — {{ active_category.name }}{% endif %}</h1>
-</section>
+<h1 class="greeting" style="margin-bottom: 4px;">Belső <em>igények</em></h1>
+<div class="greeting-date">Toner, papír, alapanyag — fogyások és rendelések</div>
 
-{% include "rendelo/_module_nav.html" %}
+<div class="rendelo-summary">
+  <div class="summary-card">
+    <div class="summary-icon new">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    </div>
+    <div class="summary-text">
+      <div class="summary-num">{{ summary.new_count }}</div>
+      <div class="summary-label">Új igény</div>
+    </div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-icon ordered">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+    </div>
+    <div class="summary-text">
+      <div class="summary-num">{{ summary.ordered_count }}</div>
+      <div class="summary-label">Megrendelve</div>
+    </div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-icon arrived">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <div class="summary-text">
+      <div class="summary-num">{{ summary.arrived_month_count }}</div>
+      <div class="summary-label">E havi lezárt</div>
+    </div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-icon urgent">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
+    </div>
+    <div class="summary-text">
+      <div class="summary-num">{{ summary.own_count }}</div>
+      <div class="summary-label">Saját nyitott</div>
+    </div>
+  </div>
+</div>
 
-{% if not requests %}
-  <div class="empty-state">
-    <p>Nincs ilyen igény.</p>
-    {% if view != "archive" %}
-      <p class="empty-hint">Adj fel egyet a <a href="/rendelo/new">Új igény</a> gombbal — a Fázis 1.2-ben.</p>
+<div class="section-header">
+  <div class="section-title">Aktív igények</div>
+  <div class="section-count">{{ active_requests|length }} · rendezés: legújabb</div>
+  <div class="section-action">
+    {% if active_category %}
+      <a href="/rendelo" class="btn" style="font-size: 12px;">Mind kategória</a>
     {% endif %}
   </div>
-{% else %}
-  <ul class="request-list">
-    {% for r in requests %}
-      <li class="request-card">
-        <div class="request-card-head">
-          <span class="request-status request-status-{{ r.status }}">{{ r.status }}</span>
-          <span class="request-cat" style="--cat-color: {{ r.category.color }};">
-            <span class="cat-dot" aria-hidden="true"></span>{{ r.category.name }}
-          </span>
-          <span class="request-meta">
-            {{ r.requested_by.name }} · {{ r.created_at.strftime("%Y-%m-%d %H:%M") }}
-          </span>
-        </div>
-        <div class="request-card-body">
-          {% if r.lines %}
-            <ul class="request-lines">
-              {% for line in r.lines %}
-                <li>
-                  <strong>{{ line.qty }} {{ line.unit }}</strong> · {{ line.title }}
-                </li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <p class="request-note">{{ r.note or "—" }}</p>
-          {% endif %}
-        </div>
-        {% if r.ordered_by %}
-          <div class="request-card-foot">
-            Megrendelte: {{ r.ordered_by.name }}{% if r.supplier %} · {{ r.supplier }}{% endif %}
-          </div>
-        {% endif %}
-      </li>
+</div>
+
+{% if active_requests %}
+  <div>
+    {% for r in active_requests %}
+      {% include "rendelo/_request_row.html" %}
     {% endfor %}
-  </ul>
+  </div>
+{% else %}
+  <div style="padding: 40px 20px; text-align: center; color: var(--ink-subtle);">
+    Nincs aktív igény ebben a szűrésben.
+  </div>
 {% endif %}
+
+{% if arrived_requests %}
+  <div class="section-header">
+    <div class="section-title">Megérkezett (utolsó hét)</div>
+    <div class="section-count">{{ arrived_requests|length }} · készletbe kerültek</div>
+  </div>
+  <div>
+    {% for r in arrived_requests %}
+      {% include "rendelo/_request_row.html" %}
+    {% endfor %}
+  </div>
+{% endif %}
+
 {% endblock %}

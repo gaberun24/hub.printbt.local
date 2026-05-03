@@ -1,44 +1,43 @@
 {% extends "base.html" %}
 
 {% block body %}
-<header class="app-header">
-  <div class="brand">
-    <a href="/" class="logo-link">
-      <div class="app-name"><a href="/" style="text-decoration:none;color:inherit">Hub</a></div>
-    </a>
-  </div>
-  <div class="header-right">
-    <button type="button" class="theme-toggle" id="theme-toggle"
-            title="Sötét/világos téma váltás" aria-label="Téma váltás">
-      <span class="theme-toggle-icon theme-toggle-sun" aria-hidden="true">☀</span>
-      <span class="theme-toggle-icon theme-toggle-moon" aria-hidden="true">☾</span>
-    </button>
-    <div class="user-chip">
-      <a href="/profile" class="user-chip-link" title="Saját profil">
-        <div class="avatar">{{ user.name|initials }}</div>
-        <div style="font-size:13px">
-          <strong>{{ user.name }}</strong><br>
-          <span style="color:var(--ink-mute);font-size:11px">{{ user.role_label }}</span>
-        </div>
-      </a>
-      <form method="post" action="/logout">
-        <button type="submit" class="logout-btn">Kilépés</button>
-      </form>
+<div class="app">
+
+  {% include "partials/_sidebar.html" %}
+
+  <div class="main">
+
+    <header class="topbar">
+      <div>
+        <div class="page-title">{{ topbar_title|default(title|default("Hub")) }}</div>
+        {% if topbar_subtitle %}
+          <span class="page-subtitle">{{ topbar_subtitle }}</span>
+        {% endif %}
+      </div>
+
+      {% block topbar_search %}
+      <div class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input placeholder="Keresés azonosító, ügyfél…" />
+        <kbd>⌘K</kbd>
+      </div>
+      {% endblock %}
+
+      <button class="icon-btn" type="button" title="Értesítések">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        <span class="dot" style="display:none;"></span>
+      </button>
+
+      {% block topbar_action %}{% endblock %}
+    </header>
+
+    <div class="content">
+      {% block main %}{% endblock %}
     </div>
+
   </div>
-</header>
 
-<div class="layout">
-  <aside class="sidebar">
-    {% include "partials/_sidebar.html" %}
-  </aside>
-
-  <main class="app-main">
-    {% block main %}{% endblock %}
-  </main>
 </div>
-
-<div class="footnote">{{ user.name }} • <span style="color:var(--accent)">●</span> hub.printbt.local</div>
 
 <div id="toast-container" aria-live="polite"></div>
 {% endblock %}

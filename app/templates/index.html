@@ -1,33 +1,65 @@
 {% extends "app.html" %}
 
 {% block main %}
-<section class="page-hero">
-  <h1 class="page-title">Üdv, {{ user.name.split()[0] }}!</h1>
-  <p class="page-lead">
-    Ez a Hub kezdőlapja. A baloldali sidebar-on válaszd ki, melyik modulban
-    szeretnél dolgozni — csak azok jelennek meg, amelyekhez a szerepköröd
-    hozzáférést ad.
-  </p>
-</section>
 
-<section class="card-grid">
-  {% for mod in modules %}
-    <a href="{{ mod.href }}" class="module-card">
-      <div class="module-card-icon">{{ mod.icon }}</div>
-      <div class="module-card-label">{{ mod.label }}</div>
-    </a>
+<h1 class="greeting">Szia, <em>{{ user.name.split()[0] }}</em>.</h1>
+<div class="greeting-date">{{ today_human }}</div>
+
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="stat-label">Nyitott igények</div>
+    <div class="stat-value">{{ stats.rendelo_open }}</div>
+    <div class="stat-meta">Rendelő modul</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Saját igényeim</div>
+    <div class="stat-value">{{ stats.rendelo_own }}</div>
+    <div class="stat-meta">amit én adtam fel</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Megrendelve</div>
+    <div class="stat-value">{{ stats.rendelo_ordered }}</div>
+    <div class="stat-meta">vár megérkezésre</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Userek</div>
+    <div class="stat-value">{{ stats.users }}</div>
+    <div class="stat-meta">aktív fiók</div>
+  </div>
+</div>
+
+<div class="section-header">
+  <div class="section-title">Modulok</div>
+  <div class="section-count">elérhető a számodra</div>
+</div>
+
+<div class="job-list">
+  {% for section in nav %}
+    {% if section.key in ["jobs", "rendelo", "stock"] %}
+      {% set first = section.nav_items[0] %}
+      <a href="{{ first.href }}" class="job-card">
+        <div class="job-id" style="min-width: 60px;">
+          <span class="module-marker {{ section.marker }}" style="width:14px;height:14px;display:inline-block;border-radius:3px;"></span>
+        </div>
+        <div class="job-body">
+          <div class="job-customer">{{ section.label }}</div>
+          <div class="job-desc">
+            {% if section.key == "jobs" %}Ügyfélmunka pipeline — felvétel, grafika, műhely, átadás.
+            {% elif section.key == "rendelo" %}Belső igénytracker — toner, papír, alapanyag.
+            {% elif section.key == "stock" %}Készletnyilvántartó — anyagigény és min-stock figyelő.
+            {% endif %}
+          </div>
+          <div class="job-meta">
+            {% if section.key == "rendelo" %}
+              <span class="status-pill grafikan">aktív</span>
+            {% else %}
+              <span class="status-pill felvett">tervezett</span>
+            {% endif %}
+          </div>
+        </div>
+      </a>
+    {% endif %}
   {% endfor %}
-</section>
+</div>
 
-<section class="page-section">
-  <h2 class="section-title">Saját szerepkörök</h2>
-  <ul class="role-list">
-    {% if user.is_admin %}<li>Admin</li>{% endif %}
-    {% if user.is_intake %}<li>Felvevő</li>{% endif %}
-    {% if user.is_designer %}<li>Grafikus</li>{% endif %}
-    {% if user.is_workshop %}<li>Műhely</li>{% endif %}
-    {% if user.is_quote_handler %}<li>Árajánlat-kezelő</li>{% endif %}
-    {% if user.is_orderer %}<li>Rendelő (orderer)</li>{% endif %}
-  </ul>
-</section>
 {% endblock %}

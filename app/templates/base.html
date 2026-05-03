@@ -1,26 +1,30 @@
 <!DOCTYPE html>
-<html lang="hu">
+<html lang="hu" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title|default("Hub") }} — Hub</title>
-  {# FOUC-prevention: téma beállítása MIELŐTT a CSS-t parsolnánk, hogy ne legyen
-     fehér-villanás dark mode-ban. Inline + sync, nem külső .js fájl. #}
+  {# FOUC-prevention: a `data-theme="dark"` az alapértelmezés, és a user
+     választása localStorage-ben ülhet. Ha a user light-ot választott
+     korábban, leveszem a default dark-ot mielőtt a CSS parzol. #}
   <script>
     (function () {
       try {
         var saved = localStorage.getItem("hub-theme");
-        var theme = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-        if (theme === "dark") {
+        if (saved === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        } else if (saved === "dark") {
           document.documentElement.setAttribute("data-theme", "dark");
         }
-      } catch (e) { /* localStorage blokkolva — light marad */ }
+        // Ha nincs saved érték, a HTML-en lévő `data-theme="dark"` marad.
+      } catch (e) { /* localStorage blokkolva — dark marad */ }
     })();
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,500&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', path='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/auth.css') }}">
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
   <script src="{{ url_for('static', path='js/theme_toggle.js') }}" defer></script>
 </head>

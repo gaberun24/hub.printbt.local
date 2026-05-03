@@ -3,13 +3,14 @@
 {% block body %}
 <main class="auth-shell">
   <div class="auth-card">
+    <div class="auth-brand">Hub</div>
     <h1 class="auth-title">Meghívó beváltása</h1>
-    <p class="auth-lead">Készítsd el a fiókodat a meghívóval kapott link alapján.</p>
+    <p class="auth-lead">Készítsd el a fiókodat a kapott link alapján.</p>
 
     {% if active_flags %}
       <div class="auth-info">
         <strong>A fiókodhoz beállított szerepkörök:</strong>
-        <ul style="margin:6px 0 0 18px;padding:0;">
+        <ul>
           {% for flag in active_flags %}<li>{{ flag.removeprefix("is_") }}</li>{% endfor %}
         </ul>
       </div>
@@ -20,23 +21,23 @@
     {% endif %}
 
     <form method="post" action="/invite/{{ invite.token }}" class="auth-form">
-      <label class="form-label">
-        <span>Név</span>
+      <label class="field">
+        <span class="field-label">Név</span>
         <input type="text" name="name" value="{{ name }}" required autofocus>
       </label>
-      <label class="form-label">
-        <span>Email</span>
+      <label class="field">
+        <span class="field-label">Email</span>
         <input type="email" name="email" value="{{ email }}" required>
       </label>
-      <label class="form-label">
-        <span>Jelszó (min. 10 karakter)</span>
+      <label class="field">
+        <span class="field-label">Jelszó (min. 10 karakter)</span>
         <input type="password" name="password" required minlength="10">
       </label>
-      <label class="form-label">
-        <span>Jelszó újra</span>
+      <label class="field">
+        <span class="field-label">Jelszó újra</span>
         <input type="password" name="password_confirm" required minlength="10">
       </label>
-      <button type="submit" class="btn-primary">Fiók létrehozása</button>
+      <button type="submit" class="btn-submit">Fiók létrehozása</button>
     </form>
   </div>
 </main>

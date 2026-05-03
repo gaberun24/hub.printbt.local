@@ -1,22 +1,68 @@
-<nav class="sidebar-nav">
-  <div class="sidebar-section-title">Modulok</div>
-  <ul class="sidebar-modules">
-    {% for mod in modules %}
-      <li>
-        <a href="{{ mod.href }}"
-           class="sidebar-module {% if mod.key == active_module %}is-active{% endif %}">
-          <span class="sidebar-module-icon" aria-hidden="true">{{ mod.icon }}</span>
-          <span class="sidebar-module-label">{{ mod.label }}</span>
-        </a>
-      </li>
-    {% endfor %}
-  </ul>
+{# Sidebar — pontosan a hub_mockup.html struktúrája:
+   brand · user-card · nav-section-ök · alsó theme toggle.
 
-  {% if user.is_admin %}
-    <div class="sidebar-section-title">Admin</div>
-    <ul class="sidebar-modules">
-      <li><a href="/admin/users" class="sidebar-module">Userek</a></li>
-      <li><a href="/admin/invites" class="sidebar-module">Meghívók</a></li>
-    </ul>
-  {% endif %}
-</nav>
+   Csak azok a nav-item-ek jelennek meg amelyekhez a user role-flagje
+   hozzáférést ad. A `nav` változó a `app.shared.sidebar` -ból jön,
+   és tartalmazza a sectiononként kibontott látható item-eket
+   badge-ekkel és aktív flag-gel.
+#}
+<aside class="sidebar">
+
+  <div class="brand">
+    <div class="brand-name">Hub</div>
+    <div class="brand-tag">printbt.local · v0.1</div>
+  </div>
+
+  <div class="user-card">
+    <div class="avatar">{{ user.name|initials|first }}</div>
+    <div class="user-info">
+      <div class="user-name">{{ user.name }}</div>
+      <div class="user-roles">
+        {% if user.is_intake %}<span class="role-dot">FELV</span>{% endif %}
+        {% if user.is_designer %}<span class="role-dot">GRAF</span>{% endif %}
+        {% if user.is_workshop %}<span class="role-dot">MŰH</span>{% endif %}
+        {% if user.is_quote_handler %}<span class="role-dot">ÁRA</span>{% endif %}
+        {% if user.is_orderer %}<span class="role-dot">REN</span>{% endif %}
+        {% if user.is_admin %}<span class="role-dot">ADM</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% for section in nav %}
+    <nav class="nav-section">
+      <div class="nav-label">
+        {% if section.marker %}<span class="module-marker {{ section.marker }}"></span>{% endif %}
+        {{ section.label }}
+      </div>
+      {% for item in section.nav_items %}
+        <a class="nav-item {% if item.active %}active{% endif %}" href="{{ item.href }}">
+          {{ item.icon|safe }}
+          {{ item.label }}
+          {% if item.badge is not none and item.badge > 0 %}
+            <span class="badge {% if item.urgent %}urgent{% endif %}">{{ item.badge }}</span>
+          {% endif %}
+        </a>
+      {% endfor %}
+    </nav>
+  {% endfor %}
+
+  <div class="theme-toggle">
+    <button class="theme-light" type="button" onclick="setHubTheme('light')">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      Light
+    </button>
+    <button class="theme-dark" type="button" onclick="setHubTheme('dark')">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      Dark
+    </button>
+
+    <form method="post" action="/logout" style="display:none" id="hub-logout-form"></form>
+  </div>
+
+  <a href="#" onclick="document.getElementById('hub-logout-form').submit(); return false;"
+     class="nav-item" style="margin-top: -16px; opacity:0.7;">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    Kilépés
+  </a>
+
+</aside>
