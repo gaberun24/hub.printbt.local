@@ -331,7 +331,7 @@ A határ pontosan ott van, ahol a pénz belép. Amíg a rendszer csak fizikai da
 
 A három modul egy DB-ben él, és néhány tábla közös:
 
-- `users` — multi-role flag-ekkel (`is_intake`, `is_designer`, `is_workshop`, `is_quote_handler`, `is_admin`, `is_orderer` — utóbbi a Rendelő modulba)
+- `users` — multi-role flag-ekkel (`is_intake`, `is_designer`, `is_workshop`, `is_quote_handler`, `is_orderer`, `is_admin`, `is_superadmin`)
 - `customers` — a Munkák modul használja, de elérhető más modulnak is (későbbi printbt.hu redesignhoz API-n is)
 - `audit_log` — `entity_type` mező különbözteti meg melyik modulé (`job`, `task`, `email`, `request`, `stock`)
 - `notifications` — közös értesítési csatorna toast-okhoz
@@ -349,11 +349,15 @@ A user role flagjei alapján a sidebar dinamikusan jelenik meg.
 | `is_workshop` | task-listák gép szerint | igény feladás | készlet böngészés |
 | `is_quote_handler` | árajánlat shared inbox | — | — |
 | `is_orderer` | — | rendelések felvétele/lezárása | készlet bevételezés |
-| `is_admin` | minden + ügyfél/email-fiók | minden | leltár, item kezelés |
+| `is_admin` | minden + ügyfél | minden | leltár, item kezelés |
+| `is_superadmin` | minden + email-fiók-konfig + API kulcs + SMB mount | minden | minden |
+
+**`is_admin` vs `is_superadmin`:** az `is_admin` az **operatív** admin (userek, meghívók, ügyfelek, kategóriák, tételek). A `is_superadmin` ezenfelül a **rendszer-szintű** integrációkat is kezeli: IMAP fiók-credentials (titkosítva), Gemini/SMTP API kulcsok, SMB mount config. Több `is_admin` lehet (pl. Kinga is), de a host-szintű titkokhoz csak a `is_superadmin` fér hozzá.
 
 **Konkrét eloszlás:**
-- **Gábor:** mind az 6 (rendszergazda + mindenes)
-- **Édesapa, Kinga:** `is_quote_handler` + `is_orderer`
+- **Gábor:** mind a 7 (rendszergazda + mindenes, egyetlen `is_superadmin`)
+- **Édesapa:** `is_quote_handler` + `is_orderer`
+- **Kinga:** `is_quote_handler` + `is_orderer` + `is_admin` (operatív segítő)
 - **3 grafikus srác:** `is_intake` + `is_designer`
 - **Vasalós + gépkezelő kollégák:** `is_workshop`
 
@@ -481,7 +485,7 @@ SMTP_USER=info@printbt.hu
 SMTP_PASSWORD=<jelszó>
 ```
 
-Email-fiókok IMAP konfigja **az admin UI-n** kerül felvitelre, nem a `.env`-be (titkosítva tárolódnak a `email_accounts.imap_password_encrypted` mezőben, a `SECRET_KEY`-vel).
+Email-fiókok IMAP konfigja **a Rendszer (superadmin) UI-n** kerül felvitelre, nem a `.env`-be (titkosítva tárolódnak a `email_accounts.imap_password_encrypted` mezőben, a `SECRET_KEY`-vel). Csak `is_superadmin` flag-gel rendelkező user fér hozzá.
 
 ### 6) Első admin
 
@@ -659,23 +663,25 @@ A grafikus storage szervert lokál fejlesztésnél nem mountoljuk — a `COREL_P
 
 ## Roadmap
 
-Részletek: [`ROADMAP.md`](ROADMAP.md). Aktuális állás: **Fázis 0 előkészítés**.
+Részletek: [`ROADMAP.md`](ROADMAP.md). Aktuális állás: **Fázis 1.2b kész** (Rendelő modul CRUD + admin nézetek). Következő: Fázis 1.3 (`hub import-rendelo`) vagy Fázis 2 (Munkák modul csontváz).
 
 ### Fázis 0 — Auth refaktor és skeleton
 
-- [ ] Rendelő auth-jának kiemelése `shared_auth` package-ba
-- [ ] Új közös app skeleton FastAPI + htmx-szel, modul-routing struktúrával
-- [ ] Közös DB séma: `users`, `customers`, `audit_log`, `notifications`
-- [ ] Multi-role flag rendszer + sidebar dinamika
-- [ ] Login / logout / meghívásos regisztráció / CLI parancsok
+- [x] Rendelő auth-jának kiemelése `shared_auth` package-ba
+- [x] Új közös app skeleton FastAPI + htmx-szel, modul-routing struktúrával
+- [x] Közös DB séma: `users`, `customers`, `audit_log`, `notifications`
+- [x] Multi-role flag rendszer + sidebar dinamika (7 flag, beleértve `is_superadmin`)
+- [x] Login / logout / meghívásos regisztráció / CLI parancsok
 - [ ] LXC bootstrap script + setup script
-- [ ] Healthcheck endpoint, alap logging
+- [x] Healthcheck endpoint, alap logging
 
 ### Fázis 1 — Rendelő modul migráció
 
-- [ ] Rendelő táblák átemelve a közös DB-be (séma + adat)
-- [ ] Rendelő route-ok átemelve `app/modules/rendelo/` alá
-- [ ] Rendelő templates átdolgozva a közös sidebar-ra
+- [x] Rendelő táblák átemelve a közös DB-be (séma `rendelo_*` prefixszel)
+- [x] Rendelő route-ok átemelve `app/modules/rendelo/` alá
+- [x] Rendelő templates átdolgozva a közös sidebar-ra (mockup-faithful)
+- [x] CRUD: új igény form, részletek, állapot-átléptetés, kommentek
+- [x] Admin nézetek: kategóriák, tételek, userek, meghívók
 - [ ] Régi Rendelő DB-ből adatmigráció (`hub import-rendelo`)
 - [ ] DNS átirányítás, régi service kikapcs
 - [ ] Production cutover
@@ -702,7 +708,8 @@ Részletek: [`ROADMAP.md`](ROADMAP.md). Aktuális állás: **Fázis 0 előkész�
 
 ### Fázis 4 — Email integráció
 
-- [ ] `email_accounts` konfig + admin UI
+- [ ] `email_accounts` konfig + **superadmin** UI (`/system/email-accounts`,
+  titkosított `imap_password_encrypted` a `SECRET_KEY`-vel)
 - [ ] IMAP poller worker (`imap_tools`, asyncio, 4 fiók párhuzamos)
 - [ ] Csatolmány-mentés storage-ra
 - [ ] Gemini előszűrés (`gemini-2.5-flash`) + `incoming_emails` mentés
@@ -737,6 +744,20 @@ Részletek: [`ROADMAP.md`](ROADMAP.md). Aktuális állás: **Fázis 0 előkész�
 - [ ] Discord/JARVIS notifikáció integráció (sürgős munka, ki nem vett pool-elem, készlet kritikus)
 - [ ] PWA telepítés a műhelyes tabletekre (offline-cache nélkül, csak ikon)
 - [ ] Gemini-alapú „heti összefoglaló" jelentés admin-nak
+
+### Rendszer-szintű (superadmin) UI — folyamatos
+
+A `is_superadmin` flag-gel elérhető `/system/...` route-ok. Bizalmas
+adatok (credentials, mount-konfig) → kizárólag a Hub gazdája fér hozzá.
+
+- [ ] `/system/email-accounts` — IMAP fiókok CRUD (Fázis 4-gyel együtt)
+- [ ] `/system/api-keys` — Gemini és SMTP credek runtime UI-ról
+  szerkeszthetők (DB-ben titkosítva, a `.env`-et override-olja)
+- [ ] `/system/storage` — SMB mount config + status. A tényleges mount
+  művelet host-szinten (LXC `/etc/pve/lxc/110.conf` `mp0` vagy systemd
+  mount unit), a UI csak a credentials-t tárolja és status-t mutat.
+- [ ] `/system/audit-log` — globális audit log böngésző (entity_type
+  szűrővel, dátumtartomány)
 
 ### Lehetséges későbbi modulok
 
