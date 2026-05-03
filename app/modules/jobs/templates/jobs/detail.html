@@ -144,12 +144,67 @@
           <div style="color: var(--ink-subtle); font-size: 13px;">Még nincs esemény.</div>
         {% endif %}
 
-        <form method="post" action="/jobs/{{ job.public_id }}/comment" class="composer">
-          <input name="body" placeholder="Komment hozzáadása…" required>
-          <button type="submit" class="btn btn-primary" style="font-size: 12px;">Küld</button>
-        </form>
+        {% if not job.deleted_at %}
+          <form method="post" action="/jobs/{{ job.public_id }}/comment" class="composer">
+            <input name="body" placeholder="Komment hozzáadása…" required>
+            <button type="submit" class="btn btn-primary" style="font-size: 12px;">Küld</button>
+          </form>
+        {% endif %}
       </div>
     </div>
+
+    {# Törlés / visszaállítás panel — ezt szándékosan a legalulra rakjuk #}
+    {% if job.deleted_at %}
+      {# Törölt munka: csak az admin lát itt visszaállítás-gombot #}
+      <div class="panel" style="border-color: var(--accent); background: linear-gradient(180deg, var(--surface), var(--accent-soft) 600%);">
+        <div class="panel-header" style="background: var(--accent-soft);">
+          <div class="panel-title" style="color: var(--accent-ink);">Törölve · {{ job.deleted_at|hu_date("time") }}</div>
+        </div>
+        <div class="panel-body">
+          <div style="font-size: 13px; line-height: 1.6;">
+            <strong>Törölte:</strong> {{ job.deleted_by.name if job.deleted_by else "—" }}<br>
+            <strong>Indok:</strong> {{ job.delete_reason or "(nincs indok)" }}
+          </div>
+          {% if user.is_admin %}
+            <form method="post" action="/jobs/{{ job.public_id }}/restore" style="margin-top: 14px;"
+                  onsubmit="return confirm('Biztosan visszaállítod ezt a munkát?');">
+              <button type="submit" class="btn btn-accent">↺ Visszaállítás</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    {% elif user.is_admin or (user.is_intake and job.intake_user_id == user.id) %}
+      {# Élő munka, törlésre jogosult user → veszélyes panel az aljra #}
+      <div class="panel" style="border-color: var(--accent); margin-top: 32px;">
+        <div class="panel-header" style="background: var(--accent-soft);">
+          <div class="panel-title" style="color: var(--accent-ink);">Munka törlése</div>
+        </div>
+        <div class="panel-body">
+          <p style="font-size: 13px; color: var(--ink-muted); margin-bottom: 16px; line-height: 1.6;">
+            A törölt munka <strong>{{ retention_days|default(90) }} napig</strong> visszaállítható
+            a <em>Törölt munkák</em> nézetből (admin). Ezután véglegesen törlődik.
+          </p>
+          <form method="post" action="/jobs/{{ job.public_id }}/delete">
+            <div class="form-group">
+              <label class="form-label">Indoklás (kötelező)</label>
+              <textarea class="form-textarea" name="reason" required minlength="5"
+                        placeholder="Pl. 'Ügyfél lemondta', 'Rosszul vettem fel — duplikátum'"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Megerősítés — írd be: <strong style="color: var(--accent);">törlés</strong></label>
+              <input class="form-input" name="confirm" required pattern="törlés|TÖRLÉS|Törlés"
+                     placeholder="törlés"
+                     autocomplete="off"
+                     style="border-color: var(--accent); max-width: 240px;">
+            </div>
+            <button type="submit" class="btn btn-accent"
+                    onclick="return confirm('Biztosan törölni akarod ezt a munkát? Visszaállítható, de a műhely már nem fogja látni.');">
+              Munka törlése
+            </button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
   </div>
 
   {# ────────────────────── JOBB OLDAL ────────────────────── #}

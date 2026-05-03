@@ -241,3 +241,50 @@ class Notification(Base):
     link_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class SystemSetting(Base):
+    """Globális rendszer-beállítások key/value formában.
+
+    Csak `is_superadmin` írhatja a Rendszer UI-ról (Fázis 4-ben jön).
+    Most CLI-ből / direktben íródik. Pl. `jobs.recycle_retention_days`
+    a soft-deletált Job-ok automatikus purge-előtti tárolási idejéhez.
+    """
+
+    __tablename__ = "system_settings"
+
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+    updated_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+# Default beállítások — az app indulásakor seedolódnak (idempotens upsert).
+DEFAULT_SYSTEM_SETTINGS: dict[str, tuple[str, str]] = {
+    "jobs.recycle_retention_days": (
+        "90",
+        "Soft-deletált munkák tárolási ideje napokban. Ennél régebbieket "
+        "a worker permanensen purge-elheti (Fázis 4-től).",
+    ),
+}
+
+
+def get_setting(db_or_session, key: str, default: str | None = None) -> str | None:
+    """Egy beállítás értékének olvasása. Hibát NEM dob — ha nincs,
+    a `default` értéket adja."""
+    s = db_or_session.get(SystemSetting, key)
+    return s.value if s else default
+
+
+def get_setting_int(db_or_session, key: str, default: int) -> int:
+    """Int-formás setting olvasása, ha nem szám akkor default."""
+    raw = get_setting(db_or_session, key)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default

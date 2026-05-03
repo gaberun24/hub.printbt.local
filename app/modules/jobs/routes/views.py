@@ -40,6 +40,7 @@ from app.shared.models import (
     AuditLog,
     Customer,
     User,
+    get_setting_int,
     utcnow,
 )
 from app.shared.sidebar import sidebar_context
@@ -78,34 +79,49 @@ def jobs_list(
     request: FastAPIRequest,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-    view: str = Query("own", description="own | pool | all"),
+    view: str = Query("own", description="own | pool | all | deleted"),
     job_type: str | None = Query(None, description="job_type szűrés"),
 ) -> HTMLResponse:
-    """Saját munkáim / Közös pool / Mind + opcionális job_type szűrés."""
+    """Saját munkáim / Közös pool / Mind / Törölt (recycle bin) +
+    opcionális job_type szűrés."""
 
-    stmt = (
-        select(Job)
-        .options(
-            selectinload(Job.customer),
-            selectinload(Job.tasks),
-            selectinload(Job.intake_user),
-            selectinload(Job.assigned_designer),
-        )
-        .where(Job.status.in_(_ACTIVE_STATUSES))
-        .order_by(Job.deadline.asc())
+    # A `deleted` view admin-only — különben 403
+    is_recycle_bin = view == "deleted"
+    if is_recycle_bin and not user.is_admin:
+        raise HTTPException(403, "Csak admin férhet hozzá a törölt munkákhoz.")
+
+    stmt = select(Job).options(
+        selectinload(Job.customer),
+        selectinload(Job.tasks),
+        selectinload(Job.intake_user),
+        selectinload(Job.assigned_designer),
+        selectinload(Job.deleted_by),
     )
 
-    if view == "own":
-        stmt = stmt.where(or_(Job.intake_user_id == user.id, Job.assigned_designer_id == user.id))
-        view_label = "Saját munkáim"
+    if is_recycle_bin:
+        stmt = stmt.where(Job.deleted_at.is_not(None)).order_by(Job.deleted_at.desc())
+        view_label = "Törölt munkák"
         active_key = "jobs_own"
-    elif view == "pool":
-        stmt = stmt.where(Job.assigned_designer_id.is_(None))
-        view_label = "Közös pool"
-        active_key = "jobs_pool"
     else:
-        view_label = "Minden aktív munka"
-        active_key = "jobs_own"
+        # Default: élő rekordok (deleted_at IS NULL) és aktív státusz
+        stmt = (
+            stmt.where(Job.deleted_at.is_(None))
+            .where(Job.status.in_(_ACTIVE_STATUSES))
+            .order_by(Job.deadline.asc())
+        )
+        if view == "own":
+            stmt = stmt.where(
+                or_(Job.intake_user_id == user.id, Job.assigned_designer_id == user.id)
+            )
+            view_label = "Saját munkáim"
+            active_key = "jobs_own"
+        elif view == "pool":
+            stmt = stmt.where(Job.assigned_designer_id.is_(None))
+            view_label = "Közös pool"
+            active_key = "jobs_pool"
+        else:
+            view_label = "Minden aktív munka"
+            active_key = "jobs_own"
 
     active_job_type = None
     if job_type:
@@ -116,7 +132,9 @@ def jobs_list(
             pass
 
     jobs = list(db.execute(stmt).scalars().all())
-    groups = _group_by_status(jobs)
+    groups = _group_by_status(jobs) if not is_recycle_bin else None
+
+    retention_days = get_setting_int(db, "jobs.recycle_retention_days", 90)
 
     return templates.TemplateResponse(
         request,
@@ -125,9 +143,15 @@ def jobs_list(
             "user": user,
             "title": view_label,
             "topbar_title": view_label,
-            "topbar_subtitle": f"{len(jobs)} aktív munka",
+            "topbar_subtitle": (
+                f"{retention_days} napig tároljuk a törölteket"
+                if is_recycle_bin
+                else f"{len(jobs)} aktív munka"
+            ),
             "view": view,
             "view_label": view_label,
+            "is_recycle_bin": is_recycle_bin,
+            "retention_days": retention_days,
             "active_job_type": active_job_type.value if active_job_type else None,
             "job_types": list(JobType),
             "jobs": jobs,
@@ -390,6 +414,7 @@ def jobs_detail(
             "job": job,
             "designers": designers,
             "next_states": next_states,
+            "retention_days": get_setting_int(db, "jobs.recycle_retention_days", 90),
             **sidebar_context(db, user, active_key="jobs_own"),
         },
     )
@@ -608,5 +633,76 @@ def jobs_comment(
     if not body:
         return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
     _log_event(db, job, user, JobEventAction.COMMENTED, {"body": body})
+    db.commit()
+    return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)
+
+
+# ───────────────────────── soft delete + restore ─────────────────────────
+
+
+def _can_delete_job(user: User, job: Job) -> bool:
+    """Ki törölhet egy Job-ot:
+    - admin (mindig)
+    - intake user önmaga által felvett Job-ot, ha még friss (24 órán belül)
+    """
+    if user.is_admin:
+        return True
+    if user.is_intake and job.intake_user_id == user.id:
+        age = utcnow() - job.created_at
+        if age.total_seconds() <= 24 * 3600:
+            return True
+    return False
+
+
+@router.post("/{public_id}/delete")
+def jobs_delete(
+    public_id: str,
+    confirm: str = Form(...),
+    reason: str = Form(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    job = _load_job_or_404(db, public_id)
+
+    if job.deleted_at is not None:
+        raise HTTPException(409, "A munka már törölve van.")
+    if not _can_delete_job(user, job):
+        raise HTTPException(403, "Nincs jogod törölni ezt a munkát.")
+
+    if (confirm or "").strip().lower() != "törlés":
+        raise HTTPException(400, "A megerősítéshez írd be pontosan: 'törlés' a megfelelő mezőbe.")
+    reason = (reason or "").strip()
+    if len(reason) < 5:
+        raise HTTPException(400, "Az indoklás kötelező (legalább 5 karakter).")
+
+    job.deleted_at = utcnow()
+    job.deleted_by_id = user.id
+    job.delete_reason = reason
+
+    _audit_job(db, user, job, "delete", new=reason)
+    db.commit()
+    # Törlés után a recycle bin-be visz, hogy lássa hova került
+    return RedirectResponse(url="/jobs?view=deleted", status_code=303)
+
+
+@router.post("/{public_id}/restore")
+def jobs_restore(
+    public_id: str,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    job = _load_job_or_404(db, public_id)
+
+    if job.deleted_at is None:
+        raise HTTPException(409, "A munka nincs törölve.")
+    if not user.is_admin:
+        raise HTTPException(403, "Csak admin tud visszaállítani törölt munkát.")
+
+    old_reason = job.delete_reason
+    job.deleted_at = None
+    job.deleted_by_id = None
+    job.delete_reason = None
+
+    _audit_job(db, user, job, "restore", old=old_reason or "")
     db.commit()
     return RedirectResponse(url=f"/jobs/{job.public_id}", status_code=303)

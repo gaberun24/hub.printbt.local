@@ -1,19 +1,28 @@
 {% extends "app.html" %}
 
 {% block topbar_action %}
-  <a href="/jobs/new" class="btn btn-accent">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-    Új munka
-  </a>
+  {% if not is_recycle_bin %}
+    <a href="/jobs/new" class="btn btn-accent">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Új munka
+    </a>
+  {% else %}
+    <a href="/jobs" class="btn">Vissza az aktívakhoz</a>
+  {% endif %}
 {% endblock %}
 
 {% block main %}
 <h1 class="greeting" style="margin-bottom: 4px;">
-  {% if view == 'own' %}Saját <em>munkáim</em>
+  {% if is_recycle_bin %}Törölt <em>munkák</em>
+  {% elif view == 'own' %}Saját <em>munkáim</em>
   {% elif view == 'pool' %}Közös <em>pool</em>
   {% else %}Minden <em>aktív</em> munka{% endif %}
 </h1>
-<div class="greeting-date">{{ jobs|length }} aktív · határidő szerint rendezve</div>
+<div class="greeting-date">
+  {% if is_recycle_bin %}{{ jobs|length }} törölt munka · {{ retention_days }} napig visszaállítható
+  {% else %}{{ jobs|length }} aktív · határidő szerint rendezve
+  {% endif %}
+</div>
 
 <div class="stock-toolbar" style="margin-top: 24px;">
   <a href="/jobs?view=own{% if active_job_type %}&job_type={{ active_job_type }}{% endif %}"
@@ -23,6 +32,11 @@
   {% if user.is_admin %}
     <a href="/jobs?view=all{% if active_job_type %}&job_type={{ active_job_type }}{% endif %}"
        class="filter-chip {% if view == 'all' %}active{% endif %}">Mind</a>
+    <a href="/jobs?view=deleted{% if active_job_type %}&job_type={{ active_job_type }}{% endif %}"
+       class="filter-chip {% if is_recycle_bin %}active{% endif %}"
+       style="margin-left: auto; {% if is_recycle_bin %}background: var(--accent); border-color: var(--accent); color: #FFF;{% endif %}">
+      🗑 Törölt
+    </a>
   {% endif %}
 </div>
 
@@ -39,8 +53,33 @@
 
 {% if not jobs %}
   <div style="padding: 40px 20px; text-align: center; color: var(--ink-subtle);">
-    Nincs aktív munka ebben a nézetben.
-    <div style="margin-top: 12px;"><a href="/jobs/new" class="btn btn-accent">Új munka</a></div>
+    {% if is_recycle_bin %}Nincs törölt munka.
+    {% else %}Nincs aktív munka ebben a nézetben.
+      <div style="margin-top: 12px;"><a href="/jobs/new" class="btn btn-accent">Új munka</a></div>
+    {% endif %}
+  </div>
+{% elif is_recycle_bin %}
+  {# Recycle bin: egyszerű lista törölt-időbélyeg + indok + visszaállítás #}
+  <div class="job-list">
+    {% for j in jobs %}
+      <a href="/jobs/{{ j.public_id }}" class="job-card" style="text-decoration: none; color: inherit; opacity: 0.85;">
+        <div class="job-id">{{ j.public_id[:3] }}-{{ j.public_id[3:] }}</div>
+        <div class="job-body">
+          <div class="job-customer">
+            {{ j.customer.name }}
+            {% if j.customer.customer_type == 'reseller' %}<span class="reseller-badge">VTL</span>{% endif %}
+          </div>
+          <div class="job-desc">{{ j.delete_reason or "(nincs indok)" }}</div>
+          <div class="job-meta">
+            <span class="status-pill atadva">törölt</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
+              törölte: {{ j.deleted_by.name.split()[0] if j.deleted_by else "—" }} ·
+              {{ j.deleted_at|hu_date("time") }}
+            </span>
+          </div>
+        </div>
+      </a>
+    {% endfor %}
   </div>
 {% else %}
   {% for status_key, status_jobs in groups.items() %}

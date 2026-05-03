@@ -154,9 +154,19 @@ class Job(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Soft-delete: élő Job-nál mindhárom NULL. Törlés után a `deleted_at`
+    # állítódik be — a default lista szűri ezt; a recycle-bin view
+    # (`/jobs?view=deleted`) pedig csak ezeket mutatja.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    deleted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    delete_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     customer: Mapped[Customer] = relationship()
     intake_user: Mapped[User] = relationship(foreign_keys=[intake_user_id])
     assigned_designer: Mapped[User | None] = relationship(foreign_keys=[assigned_designer_id])
+    deleted_by: Mapped[User | None] = relationship(foreign_keys=[deleted_by_id])
     tasks: Mapped[list[JobTask]] = relationship(
         back_populates="job",
         cascade="all, delete-orphan",
