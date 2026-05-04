@@ -35,7 +35,7 @@
   {% set bulk_count = counts.pending + counts.error + counts.skipped %}
   {% if bulk_count > 0 %}
     <form method="post" action="/admin/quarantine/rescan-all"
-          onsubmit="return confirm('{{ bulk_count }} csatolmány újraszkennelése.\nKb. {{ (bulk_count * 0.5) | round(0, &quot;ceil&quot;) | int }} mp-ig tarthat.\n\nFolytatod?');">
+          onsubmit="return confirm('{{ bulk_count }} csatolmány újraszkennelése.\nKb. {{ (bulk_count * 0.5)|round(0, 'ceil')|int }} mp-ig tarthat.\n\nFolytatod?');">
       <button type="submit" class="btn" style="font-size: 12px; padding: 8px 14px;">
         ↻ Mind nem-tiszta rescan ({{ bulk_count }})
       </button>
