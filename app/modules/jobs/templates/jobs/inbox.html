@@ -196,6 +196,29 @@
             <button type="submit" name="category" value="spam" class="btn btn-sm btn-ghost">→ Spam</button>
           {% endif %}
         </form>
+        <button type="button" class="btn btn-sm" onclick="confirmDelete()" style="margin-left: auto; color: var(--accent); border-color: var(--accent);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          Törlés
+        </button>
+      </div>
+
+      {# ── Törlés megerősítő modal ── #}
+      <div id="delete-modal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.55); align-items:center; justify-content:center;">
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:28px 32px; max-width:400px; width:90%;">
+          <div style="font-family:var(--font-display); font-size:18px; font-weight:600; font-style:italic; margin-bottom:12px;">Email törlése</div>
+          <div style="font-size:13px; color:var(--ink-muted); margin-bottom:20px;">
+            Biztosan törölni akarod ezt az emailt?<br>
+            <strong style="color:var(--ink);">{{ (selected.subject or "(nincs tárgy)")|e }}</strong><br>
+            <span style="font-family:var(--font-mono); font-size:11px;">{{ selected.from_address|e }}</span>
+          </div>
+          <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button type="button" class="btn" onclick="closeDeleteModal()">Mégsem</button>
+            <form method="post" action="/jobs/inbox/{{ selected.id }}/delete" style="margin:0;">
+              <input type="hidden" name="tab" value="{{ active_tab }}">
+              <button type="submit" class="btn btn-accent">Törlés</button>
+            </form>
+          </div>
+        </div>
       </div>
     {% else %}
       <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--ink-subtle); font-size: 13px;">
@@ -330,6 +353,14 @@ function openCompose() {
 
 function closeCompose() {
   document.getElementById('compose-popup').style.display = 'none';
+}
+
+function confirmDelete() {
+  document.getElementById('delete-modal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal').style.display = 'none';
 }
 
 function toggleMinimize() {

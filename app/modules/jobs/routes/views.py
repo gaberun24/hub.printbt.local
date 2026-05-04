@@ -913,6 +913,39 @@ def inbox_recategorize(
     )
 
 
+@router.post("/inbox/{email_id}/delete")
+def inbox_delete(
+    email_id: int,
+    tab: str = Form("work"),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Email soft-delete (purged_at kitöltése)."""
+    from app.modules.jobs.email_models import IncomingEmail
+
+    email = db.get(IncomingEmail, email_id)
+    if email is None:
+        raise HTTPException(404, "Email nem található.")
+
+    visible_account_ids = _visible_account_ids(db, user)
+    if visible_account_ids and email.account_id not in visible_account_ids:
+        raise HTTPException(403, "Nincs hozzáférésed ehhez az emailhez.")
+
+    email.purged_at = utcnow()
+    db.add(
+        AuditLog(
+            entity_type=AuditEntityType.EMAIL,
+            entity_id=email.id,
+            action="delete",
+            old_value=str(email.effective_category or "—"),
+            new_value="purged",
+            user_id=user.id,
+        )
+    )
+    db.commit()
+    return RedirectResponse(url=f"/jobs/inbox?tab={tab}", status_code=303)
+
+
 @router.get("/{public_id}", response_class=HTMLResponse)
 def jobs_detail(
     public_id: str,
