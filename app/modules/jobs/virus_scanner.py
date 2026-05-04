@@ -54,7 +54,10 @@ def _get_clamd():
 
 
 def scan_file(filepath: Path) -> tuple[ScanStatus, str | None]:
-    """Egyetlen fájl szkennelése.
+    """Egyetlen fájl szkennelése (instream — a fájl tartalmát küldi a daemonnak).
+
+    Az instream megoldás nem igényel fájlrendszer-hozzáférést a ClamAV
+    daemon-tól, így AppArmor / ProtectSystem korlátozás mellett is működik.
 
     Returns: (status, részlet) — pl. (INFECTED, "Win.Trojan.Agent-123")
     """
@@ -63,13 +66,14 @@ def scan_file(filepath: Path) -> tuple[ScanStatus, str | None]:
         return ScanStatus.SKIPPED, None
 
     try:
-        result = cd.scan_file(str(filepath))
+        with open(filepath, "rb") as f:
+            result = cd.scan_stream(f.read())
 
         if result is None:
             return ScanStatus.CLEAN, None
 
-        # result: {'/path/to/file': ('FOUND', 'Win.Trojan.Agent-123')}
-        status_str, detail = list(result.values())[0]
+        # result: {'stream': ('FOUND', 'Win.Trojan.Agent-123')}
+        status_str, detail = result.get("stream", ("ERROR", "unexpected response"))
         if status_str == "FOUND":
             return ScanStatus.INFECTED, detail
         if status_str == "ERROR":
