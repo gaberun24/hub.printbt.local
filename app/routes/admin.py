@@ -489,6 +489,60 @@ def quarantine_list(
     )
 
 
+@router.post("/quarantine/rescan-all")
+def quarantine_rescan_all(
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Minden nem-tiszta csatolmány újraszkennelése.
+
+    A `pending`, `error` és `skipped` státuszú csatolmányokat sorra
+    végigfuttatja a ClamAV-en. Az `infected`-eket nem érinti (azokat már
+    szkenneltük, vírust találtunk). Szinkronos — kis mennyiségre OK.
+    """
+    from pathlib import Path
+
+    from app.modules.jobs.email_models import EmailAttachment, ScanStatus
+    from app.modules.jobs.virus_scanner import scan_attachment
+    from app.shared.config import settings
+
+    targets = (
+        db.execute(
+            select(EmailAttachment).where(
+                EmailAttachment.scan_status.in_([
+                    ScanStatus.PENDING,
+                    ScanStatus.ERROR,
+                    ScanStatus.SKIPPED,
+                ])
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    upload_dir = Path(settings.upload_dir)
+    rescanned = 0
+    for att in targets:
+        old = str(att.scan_status)
+        new = scan_attachment(att, upload_dir)
+        rescanned += 1
+        # Csak akkor logoljuk, ha státusz tényleg változott
+        if str(new) != old:
+            db.add(
+                AuditLog(
+                    entity_type=AuditEntityType.EMAIL,
+                    entity_id=att.email_id,
+                    action="rescan_attachment",
+                    old_value=old,
+                    new_value=f"{new} ({att.filename})",
+                    user_id=user.id,
+                )
+            )
+
+    db.commit()
+    return RedirectResponse(url="/admin/quarantine", status_code=303)
+
+
 @router.post("/quarantine/{attachment_id}/rescan")
 def quarantine_rescan(
     attachment_id: int,

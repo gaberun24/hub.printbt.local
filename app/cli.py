@@ -105,6 +105,66 @@ def cmd_list_users(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rescan_attachments(args: argparse.Namespace) -> int:
+    """Minden nem-tiszta (pending/error/skipped) csatolmány újraszkennelése.
+
+    Hasznos első telepítés után, amikor a ClamAV daemon még nem volt
+    elérhető — a meglévő emailek csatolmányai `pending` vagy `skipped`
+    státuszban maradtak, ezt egyenesbe rakja.
+    """
+    from pathlib import Path
+
+    init_db()
+
+    from app.modules.jobs.email_models import EmailAttachment, ScanStatus
+    from app.modules.jobs.virus_scanner import _get_clamd, scan_attachment
+
+    if _get_clamd() is None:
+        print(
+            "HIBA: ClamAV daemon nem elérhető. Indítsd el: "
+            "sudo systemctl start clamav-daemon",
+            file=sys.stderr,
+        )
+        return 1
+
+    targets_filter = [ScanStatus.PENDING, ScanStatus.ERROR, ScanStatus.SKIPPED]
+    if args.all:
+        targets_filter.append(ScanStatus.CLEAN)
+
+    with SessionLocal() as db:
+        targets = (
+            db.execute(
+                select(EmailAttachment).where(EmailAttachment.scan_status.in_(targets_filter))
+            )
+            .scalars()
+            .all()
+        )
+
+        if not targets:
+            print("Nincs újraszkennelendő csatolmány.")
+            return 0
+
+        upload_dir = Path(settings.upload_dir)
+        from collections import Counter
+
+        results: Counter = Counter()
+        print(f"Újraszkennelés: {len(targets)} csatolmány...")
+        for att in targets:
+            old = str(att.scan_status)
+            new = scan_attachment(att, upload_dir)
+            results[str(new)] += 1
+            mark = "→" if str(new) != old else "·"
+            print(f"  {mark} #{att.id} {att.filename[:50]:<50}  {old:<8} → {new}")
+
+        db.commit()
+
+        print()
+        print("Eredmény:")
+        for status, n in sorted(results.items()):
+            print(f"  {status:<10} {n}")
+    return 0
+
+
 def cmd_generate_invite(args: argparse.Namespace) -> int:
     init_db()
     flags = _parse_roles(args.roles)
@@ -179,6 +239,17 @@ def main() -> int:
     p_inv.add_argument("--email", help="Email hint (kihez küldöd)", default=None)
     p_inv.add_argument("--expires-days", type=int, default=7, help="Lejárat napokban (default: 7)")
     p_inv.set_defaults(func=cmd_generate_invite)
+
+    p_rescan = sub.add_parser(
+        "rescan-attachments",
+        help="Csatolmányok újraszkennelése ClamAV-vel (pending/error/skipped)",
+    )
+    p_rescan.add_argument(
+        "--all",
+        action="store_true",
+        help="A `clean` státuszúakat is újraszkenneli (pl. ha új vírus-def jött)",
+    )
+    p_rescan.set_defaults(func=cmd_rescan_attachments)
 
     args = parser.parse_args()
     return args.func(args)

@@ -28,8 +28,19 @@
   </div>
 </div>
 
-<div style="margin-top: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
-  Összesen {{ total }} csatolmány. A „kihagyva" akkor jön, ha a ClamAV daemon nem volt elérhető — érdemes ezeket rescan-elni.
+<div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+  <div style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
+    Összesen {{ total }} csatolmány. A „kihagyva" akkor jön, ha a ClamAV daemon nem volt elérhető — érdemes ezeket rescan-elni.
+  </div>
+  {% set bulk_count = counts.pending + counts.error + counts.skipped %}
+  {% if bulk_count > 0 %}
+    <form method="post" action="/admin/quarantine/rescan-all"
+          onsubmit="return confirm('{{ bulk_count }} csatolmány újraszkennelése.\nKb. {{ (bulk_count * 0.5) | round(0, &quot;ceil&quot;) | int }} mp-ig tarthat.\n\nFolytatod?');">
+      <button type="submit" class="btn" style="font-size: 12px; padding: 8px 14px;">
+        ↻ Mind nem-tiszta rescan ({{ bulk_count }})
+      </button>
+    </form>
+  {% endif %}
 </div>
 
 {# ── Listák státuszonként ──────────────────────────────────── #}
