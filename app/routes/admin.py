@@ -424,6 +424,151 @@ def _base_url(request: FastAPIRequest) -> str:
     return f"{request.url.scheme}://{request.url.netloc}"
 
 
+# ───────────────────────── quarantine (vírus-szkennelés) ─────────────────────────
+
+
+@router.get("/quarantine", response_class=HTMLResponse)
+def quarantine_list(
+    request: FastAPIRequest,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """Csatolmány-szkennelési státusz: fertőzött, hibás, várakozó, tiszta.
+
+    A fertőzött fájlokat a vírusszkenner a karantén mappába mozgatja
+    (uploads/quarantine/), nem a default helyén marad. Az admin innen
+    láthatja, és vagy újraszkenneli (rescan) vagy törli a fájlt.
+    """
+    from app.modules.jobs.email_models import EmailAttachment, IncomingEmail, ScanStatus
+
+    # Csoportos darabszámok minden státuszhoz
+    counts_q = (
+        db.execute(
+            select(EmailAttachment.scan_status, func.count())
+            .group_by(EmailAttachment.scan_status)
+        )
+        .all()
+    )
+    counts: dict[str, int] = {s.value: 0 for s in ScanStatus}
+    for status_val, n in counts_q:
+        counts[str(status_val)] = n
+
+    # A "káros" listához joinold az emaillel — feladó, tárgy, dátum a UI-on
+    bad_statuses = [ScanStatus.INFECTED, ScanStatus.ERROR, ScanStatus.PENDING]
+    rows = (
+        db.execute(
+            select(EmailAttachment, IncomingEmail)
+            .join(IncomingEmail, EmailAttachment.email_id == IncomingEmail.id)
+            .where(EmailAttachment.scan_status.in_([s.value for s in bad_statuses]))
+            .order_by(
+                # infected legfelül, aztán error, aztán pending
+                EmailAttachment.scan_status,
+                IncomingEmail.received_at.desc(),
+            )
+        ).all()
+    )
+
+    # Csoportosítva, hogy a template könnyen rajzolja
+    grouped: dict[str, list] = {s.value: [] for s in bad_statuses}
+    for att, em in rows:
+        grouped[str(att.scan_status)].append((att, em))
+
+    return templates.TemplateResponse(
+        request,
+        "admin/quarantine.html",
+        {
+            "user": user,
+            "title": "Karantén",
+            "topbar_title": "Karantén",
+            "topbar_subtitle": "vírus-szkennelt csatolmányok",
+            "counts": counts,
+            "grouped": grouped,
+            "total": sum(counts.values()),
+            **sidebar_context(db, user, active_key="admin_quarantine"),
+        },
+    )
+
+
+@router.post("/quarantine/{attachment_id}/rescan")
+def quarantine_rescan(
+    attachment_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Egy csatolmány újraszkennelése (pl. ha a ClamAV daemon korábban
+    nem volt elérhető, és most már igen)."""
+    from app.modules.jobs.email_models import EmailAttachment
+    from app.modules.jobs.virus_scanner import scan_attachment
+    from app.shared.config import settings
+    from pathlib import Path
+
+    att = db.get(EmailAttachment, attachment_id)
+    if att is None:
+        raise HTTPException(404, "Csatolmány nem található.")
+
+    old_status = att.scan_status
+    new_status = scan_attachment(att, Path(settings.upload_dir))
+    db.add(
+        AuditLog(
+            entity_type=AuditEntityType.EMAIL,
+            entity_id=att.email_id,
+            action="rescan_attachment",
+            old_value=str(old_status),
+            new_value=f"{new_status} ({att.filename})",
+            user_id=user.id,
+        )
+    )
+    db.commit()
+    return RedirectResponse(url="/admin/quarantine", status_code=303)
+
+
+@router.post("/quarantine/{attachment_id}/delete")
+def quarantine_delete(
+    attachment_id: int,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Egy fertőzött vagy hibás csatolmány végleges törlése (fájl + DB rekord).
+
+    Csak `infected` vagy `error` státuszra engedélyezett — a `pending`
+    legyen először rescan-elve, és a `clean` ne kerüljön ide soha.
+    """
+    from app.modules.jobs.email_models import EmailAttachment, ScanStatus
+    from app.shared.config import settings
+    from pathlib import Path
+
+    att = db.get(EmailAttachment, attachment_id)
+    if att is None:
+        raise HTTPException(404, "Csatolmány nem található.")
+    if att.scan_status not in (ScanStatus.INFECTED, ScanStatus.ERROR):
+        raise HTTPException(
+            409, f"Csak fertőzött vagy hibás csatolmányt törölhetsz (jelenlegi: {att.scan_status})."
+        )
+
+    # Fájl törlés a storage-ról (lehet a karantén mappában)
+    fpath = Path(settings.upload_dir) / att.storage_path
+    file_existed = fpath.exists()
+    if file_existed:
+        try:
+            fpath.unlink()
+        except OSError:
+            pass  # ha nem sikerül, a DB rekordot akkor is töröljük
+
+    db.add(
+        AuditLog(
+            entity_type=AuditEntityType.EMAIL,
+            entity_id=att.email_id,
+            action="delete_attachment",
+            old_value=f"{att.scan_status} ({att.filename})",
+            new_value=att.scan_result or "",
+            user_id=user.id,
+        )
+    )
+    db.delete(att)
+    db.commit()
+    return RedirectResponse(url="/admin/quarantine", status_code=303)
+
+
 # A `current_user` itt nem direktben hivatkozott, de az import-graph
 # transparenciájáért bent van.
 _ = current_user

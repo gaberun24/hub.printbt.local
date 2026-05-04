@@ -35,6 +35,7 @@ _ICON_USER_SETTINGS = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke=
 _ICON_INVITE = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>'
 _ICON_TAG = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>'
 _ICON_CATALOG = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>'
+_ICON_SHIELD = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
 
 
 @dataclass(frozen=True)
@@ -198,16 +199,25 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
                 icon=_ICON_CATALOG,
                 visible=lambda u: u.is_admin,
             ),
+            NavItem(
+                key="admin_quarantine",
+                label="Karantén",
+                href="/admin/quarantine",
+                icon=_ICON_SHIELD,
+                visible=lambda u: u.is_admin,
+                badge_key="quarantine_bad",
+                urgent=True,  # vermilion badge ha van fertőzött/hibás
+            ),
         ),
     ),
 )
 
 
 def _compute_counts(db: Session) -> dict[str, int]:
-    """A nav-item-ek badge-éhez gyűjt számokat. Most csak a Rendelő nyitott
-    igényeinek darabszámát adja vissza — később egészül ki."""
+    """A nav-item-ek badge-éhez gyűjt számokat."""
 
     # A Rendelő nyitott igények — lazy-import, hogy körkörös import ne legyen
+    from app.modules.jobs.email_models import EmailAttachment, ScanStatus
     from app.modules.rendelo.models import Request, RequestStatus
 
     rendelo_open = (
@@ -219,7 +229,20 @@ def _compute_counts(db: Session) -> dict[str, int]:
         or 0
     )
 
-    return {"rendelo_open": rendelo_open}
+    # Karantén: fertőzött + hibás (ezekre kell admin akció)
+    quarantine_bad = (
+        db.execute(
+            select(func.count())
+            .select_from(EmailAttachment)
+            .where(EmailAttachment.scan_status.in_([ScanStatus.INFECTED, ScanStatus.ERROR]))
+        ).scalar()
+        or 0
+    )
+
+    return {
+        "rendelo_open": rendelo_open,
+        "quarantine_bad": quarantine_bad,
+    }
 
 
 def sidebar_nav(db: Session, user: User, active_key: str | None = None) -> list[dict]:
