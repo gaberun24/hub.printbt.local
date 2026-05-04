@@ -6,8 +6,6 @@ táblát.
 
 from __future__ import annotations
 
-from logging.config import fileConfig
-
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
@@ -31,8 +29,12 @@ config = context.config
 # A settings-ből vesszük a DB URL-t (egyetlen forrás), nem az alembic.ini-ből.
 config.set_main_option("sqlalchemy.url", settings.db_url)
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# A `fileConfig(config.config_file_name)` hívást SZÁNDÉKOSAN kihagyjuk:
+# az alembic.ini [logger_*] szekciói átírják a root loggert WARN-ra,
+# ami a hub.service és hub-worker.service Python logging-ját elnémítja
+# az `init_db()` hívás után (mert az `command.upgrade` az env.py-t betölti
+# minden indításkor). Hagyjuk hogy az app saját logging.basicConfig-ja
+# érvényesüljön.
 
 target_metadata = Base.metadata
 

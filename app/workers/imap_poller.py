@@ -32,6 +32,11 @@ from app.shared.models import utcnow
 
 log = logging.getLogger(__name__)
 
+# Első poll esetén ennyi levelet hozzunk le (függetlenül SEEN-től), hogy a
+# meglévő mailfiók tartalma ne maradjon ki. A következő polltól UID-alapú
+# inkrementális.
+INITIAL_FETCH_LIMIT = 50
+
 
 def _safe_filename(name: str) -> str:
     """Fájlnév tisztítása — csak biztonságos karakterek."""
@@ -173,20 +178,39 @@ def poll_account(db: Session, account: EmailAccount) -> int:
         return 0
 
     count = 0
+    is_first_poll = not account.last_poll_uid
     try:
         with MailBox(account.imap_host, account.imap_port).login(
             account.imap_user, password
         ) as mailbox:
-            # UID-alapú szűrés: csak az újakat szedjük le
-            if account.last_poll_uid:
-                criteria = AND(uid=f"{int(account.last_poll_uid) + 1}:*")
+            if is_first_poll:
+                # Első poll — az utolsó N levelet hozzuk le függetlenül SEEN-től.
+                # Egy aktívan használt fiókban minden mail már olvasott, ezért a
+                # `seen=False` szűrő üres inboxot eredményezne. A reverse=True +
+                # limit a legfrissebb leveleket adja vissza.
+                fetch_kwargs = {
+                    "criteria": "ALL",
+                    "mark_seen": False,
+                    "bulk": True,
+                    "reverse": True,
+                    "limit": INITIAL_FETCH_LIMIT,
+                }
+                log.info(
+                    "Első poll: %s — utolsó %d levél lehúzása",
+                    account.label,
+                    INITIAL_FETCH_LIMIT,
+                )
             else:
-                # Első poll — UNSEEN emaileket szedjük
-                criteria = AND(seen=False)
+                # Inkrementális: csak az újakat (UID > last_poll_uid)
+                fetch_kwargs = {
+                    "criteria": AND(uid=f"{int(account.last_poll_uid) + 1}:*"),
+                    "mark_seen": False,
+                    "bulk": True,
+                }
 
             max_uid = int(account.last_poll_uid or "0")
 
-            for msg in mailbox.fetch(criteria, mark_seen=False, bulk=True):
+            for msg in mailbox.fetch(**fetch_kwargs):
                 incoming = _save_email(db, account, msg)
                 if incoming is None:
                     continue
@@ -207,6 +231,10 @@ def poll_account(db: Session, account: EmailAccount) -> int:
             account.last_poll_at = utcnow()
             if max_uid > int(account.last_poll_uid or "0"):
                 account.last_poll_uid = str(max_uid)
+            elif is_first_poll and max_uid == 0:
+                # Üres mailbox az első pollnál — jelöljük "0"-val,
+                # hogy a következő polltól már UID-alapú legyen
+                account.last_poll_uid = "0"
 
             db.commit()
 
