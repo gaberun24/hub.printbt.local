@@ -103,7 +103,7 @@ def customers_new_submit(
     legal_type: str = Form("individual"),
     tax_number: str | None = Form(None),
     customer_type: str = Form("retail"),
-    discount_pct: int | None = Form(None),
+    discount_pct: str | None = Form(None),
     country: str = Form("Magyarország"),
     postal_code: str | None = Form(None),
     city: str | None = Form(None),
@@ -122,6 +122,7 @@ def customers_new_submit(
 
     lt = LegalType.COMPANY if legal_type == "company" else LegalType.INDIVIDUAL
     ct = CustomerType.RESELLER if customer_type == "reseller" else CustomerType.RETAIL
+    discount_val = int(discount_pct) if discount_pct and discount_pct.strip() else None
 
     if lt == LegalType.COMPANY and not (tax_number or "").strip():
         return RedirectResponse(
@@ -136,7 +137,7 @@ def customers_new_submit(
         legal_type=lt,
         tax_number=(tax_number or "").strip() or None if lt == LegalType.COMPANY else None,
         customer_type=ct,
-        discount_pct=discount_pct if ct == CustomerType.RESELLER else None,
+        discount_pct=discount_val if ct == CustomerType.RESELLER else None,
         country=(country or "Magyarország").strip() or "Magyarország",
         postal_code=(postal_code or "").strip() or None,
         city=(city or "").strip() or None,
@@ -210,7 +211,7 @@ def customers_update(
     legal_type: str = Form("individual"),
     tax_number: str | None = Form(None),
     customer_type: str = Form("retail"),
-    discount_pct: int | None = Form(None),
+    discount_pct: str | None = Form(None),
     country: str = Form("Magyarország"),
     postal_code: str | None = Form(None),
     city: str | None = Form(None),
@@ -230,6 +231,7 @@ def customers_update(
 
     lt = LegalType.COMPANY if legal_type == "company" else LegalType.INDIVIDUAL
     ct = CustomerType.RESELLER if customer_type == "reseller" else CustomerType.RETAIL
+    discount_val = int(discount_pct) if discount_pct and discount_pct.strip() else None
 
     if lt == LegalType.COMPANY and not (tax_number or "").strip():
         raise HTTPException(400, "Cégeknek adószám kötelező.")
@@ -240,7 +242,7 @@ def customers_update(
     customer.legal_type = lt
     customer.tax_number = (tax_number or "").strip() or None if lt == LegalType.COMPANY else None
     customer.customer_type = ct
-    customer.discount_pct = discount_pct if ct == CustomerType.RESELLER else None
+    customer.discount_pct = discount_val if ct == CustomerType.RESELLER else None
     customer.country = (country or "Magyarország").strip() or "Magyarország"
     customer.postal_code = (postal_code or "").strip() or None
     customer.city = (city or "").strip() or None
