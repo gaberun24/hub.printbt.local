@@ -9,16 +9,21 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from pathlib import Path
+
+import mimetypes
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi import Request as FastAPIRequest
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.modules.jobs.models import (
+    AttachmentKind,
     IntakeChannel,
     Job,
+    JobAttachment,
     JobEvent,
     JobEventAction,
     JobStatus,
@@ -1065,6 +1070,135 @@ def jobs_detail(
             **sidebar_context(db, user, active_key="jobs_own"),
         },
     )
+
+
+# ───────────────────────── job file management ─────────────────────────
+
+
+def _job_file_dir(public_id: str) -> Path:
+    """Munka fájl-könyvtára: uploads/munkak/{PUBLIC_ID}/"""
+    d = Path(settings.upload_dir) / "munkak" / public_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+@router.post("/{public_id}/files/upload")
+async def job_file_upload(
+    public_id: str,
+    kind: str = Form("other"),
+    files: list[UploadFile] = File(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Fájl(ok) feltöltése egy munkához."""
+    job = _load_job_or_404(db, public_id)
+
+    try:
+        file_kind = AttachmentKind(kind)
+    except ValueError:
+        file_kind = AttachmentKind.OTHER
+
+    dest_dir = _job_file_dir(public_id)
+    count = 0
+
+    for f in files:
+        if not f.filename or not f.size:
+            continue
+        data = await f.read()
+
+        safe_name = "".join(
+            c if (c.isalnum() or c in ".-_ ") else "_" for c in f.filename
+        ).strip() or "unnamed"
+
+        dest = dest_dir / safe_name
+        counter = 1
+        while dest.exists():
+            stem, suffix = dest.stem, dest.suffix
+            dest = dest_dir / f"{stem}_{counter}{suffix}"
+            counter += 1
+
+        dest.write_bytes(data)
+
+        ct = f.content_type or mimetypes.guess_type(f.filename)[0]
+        att = JobAttachment(
+            job_id=job.id,
+            kind=file_kind,
+            filename=f.filename,
+            file_path=str(dest.relative_to(Path(settings.upload_dir))),
+            size_bytes=len(data),
+            content_type=ct,
+            uploaded_by_id=user.id,
+        )
+        db.add(att)
+        count += 1
+
+    if count:
+        db.add(
+            JobEvent(
+                job_id=job.id,
+                user_id=user.id,
+                action=JobEventAction.COMMENTED,
+                payload_json=json.dumps({"text": f"{count} fájl feltöltve ({file_kind.value})"}),
+            )
+        )
+        db.commit()
+
+    return RedirectResponse(url=f"/jobs/{public_id}#files", status_code=303)
+
+
+@router.get("/{public_id}/files/{attachment_id}/download")
+def job_file_download(
+    public_id: str,
+    attachment_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """Fájl letöltése."""
+    _load_job_or_404(db, public_id)
+    att = db.get(JobAttachment, attachment_id)
+    if att is None or att.job.public_id != public_id:
+        raise HTTPException(404, "Fájl nem található.")
+
+    filepath = Path(settings.upload_dir) / att.file_path
+    if not filepath.exists():
+        raise HTTPException(404, "Fájl nem található a tárolóban.")
+
+    return FileResponse(
+        path=filepath,
+        filename=att.filename,
+        media_type=att.content_type or "application/octet-stream",
+    )
+
+
+@router.post("/{public_id}/files/{attachment_id}/delete")
+def job_file_delete(
+    public_id: str,
+    attachment_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Fájl törlése egy munkáról."""
+    job = _load_job_or_404(db, public_id)
+    att = db.get(JobAttachment, attachment_id)
+    if att is None or att.job_id != job.id:
+        raise HTTPException(404, "Fájl nem található.")
+
+    filepath = Path(settings.upload_dir) / att.file_path
+    if filepath.exists():
+        filepath.unlink()
+
+    db.add(
+        JobEvent(
+            job_id=job.id,
+            user_id=user.id,
+            action=JobEventAction.COMMENTED,
+            payload_json=json.dumps({"text": f"Fájl törölve: {att.filename}"}),
+        )
+    )
+    db.delete(att)
+    db.commit()
+
+    return RedirectResponse(url=f"/jobs/{public_id}#files", status_code=303)
 
 
 # ───────────────────────── task actions ─────────────────────────

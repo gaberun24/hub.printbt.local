@@ -92,6 +92,10 @@ class TaskStatus(StrEnum):
 class AttachmentKind(StrEnum):
     SOURCE = "source"
     PREVIEW = "preview"
+    CUSTOMER = "customer"
+    DESIGN = "design"
+    PRODUCTION = "production"
+    OTHER = "other"
 
 
 class JobEventAction(StrEnum):
@@ -214,11 +218,16 @@ class JobTask(Base):
 
 
 class JobAttachment(Base):
-    """Egy Job-hoz tartozó fájl: forrásfájl (Corel/Illustrator) vagy a
-    Corel-makró által generált preview PNG.
+    """Egy Job-hoz tartozó fájl.
 
-    A `page_index` csak preview-knél: többoldalas Corel doc-nál minden
-    oldalra külön preview.
+    `kind` típusok:
+      - source/preview: Corel-makró watcher (meglévő flow)
+      - customer: ügyfél anyag (email csatolmány vagy kézi feltöltés)
+      - design: grafikus terv
+      - production: nyomdakész fájl
+      - other: egyéb
+
+    A `page_index` csak preview-knél (többoldalas Corel doc).
     """
 
     __tablename__ = "jobs_attachments"
@@ -231,9 +240,15 @@ class JobAttachment(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     page_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    uploaded_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     job: Mapped[Job] = relationship(back_populates="attachments")
+    uploaded_by: Mapped[User | None] = relationship()
 
 
 class JobEvent(Base):
