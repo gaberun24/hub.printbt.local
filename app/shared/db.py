@@ -45,12 +45,19 @@ def get_db() -> Iterator[Session]:
 
 def _alembic_upgrade_head() -> None:
     """Programatikus `alembic upgrade head`. Idempotens — ha már a head-en
-    vagyunk, no-op."""
+    vagyunk, no-op.
+
+    A script_location-t kifejezetten az abszolút path-ra állítjuk, hogy a
+    CLI tetszőleges cwd-ből futtatva is megtalálja a migrációkat (az
+    alembic.ini-ben `script_location = alembic` relatív, az alembic
+    a CWD-hez méri).
+    """
     from alembic import command
     from alembic.config import Config
 
     cfg = Config(str(ALEMBIC_INI))
     cfg.set_main_option("sqlalchemy.url", settings.db_url)
+    cfg.set_main_option("script_location", str(PROJECT_ROOT / "alembic"))
     command.upgrade(cfg, "head")
 
 
