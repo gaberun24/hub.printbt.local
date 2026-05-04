@@ -37,7 +37,11 @@ chown -R hub:hub "$DATA_DIR" "$UPLOAD_DIR" "$HUB_DIR"
 
 # ─── 1) venv létrehozás ────────────────────────────────────────
 echo "▸ [1/7] venv létrehozás $VENV_DIR-ben..."
-if [[ ! -d "$VENV_DIR" ]]; then
+# Ha a mappa létezik de a venv félkész/üres (nincs benne bin/pip),
+# töröljük és csináljuk újra. Ezt egy korábbi install-prereqs verzió
+# tudta hagyni, ami mkdir-rel előre létrehozta az /opt/hub/venv-et.
+if [[ ! -x "$VENV_DIR/bin/pip" ]]; then
+    rm -rf "$VENV_DIR"
     sudo -u hub "$PYTHON_BIN" -m venv "$VENV_DIR"
 fi
 sudo -u hub "$VENV_DIR/bin/pip" install --upgrade --quiet pip wheel setuptools
