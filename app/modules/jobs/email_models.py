@@ -46,6 +46,7 @@ class ClassifiedBy(StrEnum):
     RULE_CUSTOMER = "rule_customer"  # Python: ismert ügyfél email
     RULE_SUPPLIER = "rule_supplier"  # Python: ismert szállító domain
     RULE_SPAM = "rule_spam"  # Python: spam pattern (unsubscribe, stb.)
+    RULE_FALLBACK = "rule_fallback"  # Default OTHER, ha Gemini nem elérhető
     GEMINI = "gemini"  # Gemini flash API
     MANUAL = "manual"  # User kézi átsorolás
 

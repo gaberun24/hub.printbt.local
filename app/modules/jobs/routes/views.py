@@ -711,6 +711,34 @@ async def _read_upload_files(files: list[UploadFile]) -> list[tuple[str, bytes]]
     return result
 
 
+def _account_smtp_kwargs(account) -> dict:
+    """Per-account SMTP override kwargs a `send_email`-hez.
+
+    Ha az `EmailAccount`-on van saját SMTP konfig, azt használjuk
+    (pl. info@printbt.hu fiók saját SMTP-vel megy ki). Egyébként a
+    globális `.env` SMTP-re esik vissza.
+    """
+    if not account.smtp_host:
+        return {}
+
+    from app.modules.jobs.email_crypto import decrypt_password
+
+    smtp_password: str | None = None
+    if account.smtp_password_encrypted:
+        try:
+            smtp_password = decrypt_password(account.smtp_password_encrypted)
+        except ValueError:
+            smtp_password = None
+
+    return {
+        "smtp_host": account.smtp_host,
+        "smtp_port": account.smtp_port,
+        "smtp_user": account.smtp_user,
+        "smtp_password": smtp_password,
+        "smtp_use_tls": account.smtp_use_tls,
+    }
+
+
 @router.post("/inbox/{email_id}/reply")
 async def inbox_reply(
     email_id: int,
@@ -748,6 +776,7 @@ async def inbox_reply(
             in_reply_to=email.message_id,
             references=email.message_id,
             attachments=file_list,
+            **_account_smtp_kwargs(account),
         )
     except Exception as exc:
         raise HTTPException(500, f"Email küldés sikertelen: {exc}") from exc
@@ -795,6 +824,7 @@ async def inbox_compose(
             subject.strip(),
             body,
             attachments=file_list,
+            **_account_smtp_kwargs(account),
         )
     except Exception as exc:
         raise HTTPException(500, f"Email küldés sikertelen: {exc}") from exc

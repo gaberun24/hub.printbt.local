@@ -11,7 +11,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, Form, HTTPException
 from fastapi import Request as FastAPIRequest
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.shared.db import get_db
@@ -88,11 +88,11 @@ def users_update(
     # Védelem: az admin saját magát ne tudja `is_admin`-ról levenni egyedüli adminként.
     new_is_admin = is_admin == "on"
     if not new_is_admin and target.id == user.id:
-        admin_count = (
-            db.execute(select(User).where(User.is_admin.is_(True), User.active.is_(True)))
-            .all()
-            .__len__()
-        )
+        admin_count = db.execute(
+            select(func.count())
+            .select_from(User)
+            .where(User.is_admin.is_(True), User.active.is_(True))
+        ).scalar() or 0
         if admin_count <= 1:
             raise HTTPException(409, "Nem veheted le magadról az utolsó admin-jogot.")
 

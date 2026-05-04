@@ -49,7 +49,15 @@ _SPAM_SUBJECT_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"act\s+now", re.IGNORECASE),
     re.compile(r"free\s+gift", re.IGNORECASE),
     re.compile(r"click\s+here", re.IGNORECASE),
-    re.compile(r"nore[p]?ly@", re.IGNORECASE),
+]
+
+# Feladó-cím spam minták. A noreply jellegű címekről érkező mail
+# 99%-ban automatizált, marketing vagy értesítés — nem munka.
+_SPAM_SENDER_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"^no[\-_]?reply@", re.IGNORECASE),
+    re.compile(r"^donot[\-_]?reply@", re.IGNORECASE),
+    re.compile(r"^newsletter@", re.IGNORECASE),
+    re.compile(r"^marketing@", re.IGNORECASE),
 ]
 
 _SPAM_BODY_PATTERNS: list[re.Pattern[str]] = [
@@ -111,6 +119,12 @@ def _check_spam(subject: str | None, body_text: str | None, from_address: str) -
     domain = _extract_domain(from_address)
     if domain in _SPAM_SENDER_DOMAINS:
         return True
+
+    # Spam feladó local-part (noreply@, donotreply@, newsletter@, marketing@)
+    addr = (from_address or "").strip()
+    for pat in _SPAM_SENDER_PATTERNS:
+        if pat.search(addr):
+            return True
 
     # Subject minták
     subj = subject or ""
@@ -184,7 +198,7 @@ def classify_email(
     log.info("Email #%s → OTHER (fallback, nincs Gemini)", email.id)
     return ClassificationResult(
         category=EmailCategory.OTHER,
-        classified_by=ClassifiedBy.GEMINI,
+        classified_by=ClassifiedBy.RULE_FALLBACK,
         confidence=0.3,
     )
 

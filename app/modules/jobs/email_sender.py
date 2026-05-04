@@ -30,14 +30,31 @@ def send_email(
     in_reply_to: str | None = None,
     references: str | None = None,
     attachments: list[tuple[str, bytes]] | None = None,
+    smtp_host: str | None = None,
+    smtp_port: int | None = None,
+    smtp_user: str | None = None,
+    smtp_password: str | None = None,
+    smtp_use_tls: bool | None = None,
 ) -> str:
-    """Email küldése a közös SMTP szerveren keresztül.
+    """Email küldése SMTP-n keresztül.
+
+    Ha az smtp_* paraméterek meg vannak adva (pl. EmailAccount per-account
+    SMTP konfigja), azokat használja. Egyébként a globális
+    `settings.smtp_*` értékekre esik vissza.
 
     attachments: lista (filename, file_bytes) tuple-ökből.
     Returns: az elküldött email Message-ID-ja.
     """
-    if not settings.smtp_host:
-        raise ValueError("SMTP szerver nincs konfigurálva (.env: SMTP_HOST).")
+    host = smtp_host or settings.smtp_host
+    port = smtp_port or settings.smtp_port
+    user = smtp_user if smtp_user is not None else settings.smtp_user
+    password = smtp_password if smtp_password is not None else settings.smtp_password
+    use_tls = True if smtp_use_tls is None else smtp_use_tls
+
+    if not host:
+        raise ValueError(
+            "SMTP szerver nincs konfigurálva — sem az email-fiókon, sem a .env SMTP_HOST-ban."
+        )
 
     msg = MIMEMultipart("mixed")
     msg["From"] = formataddr((from_label, from_address))
@@ -67,12 +84,13 @@ def send_email(
 
     log.info("SMTP küldés: %s → %s (%s)", from_address, to_address, subject[:50])
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as server:
+    with smtplib.SMTP(host, port, timeout=30) as server:
         server.ehlo()
-        server.starttls()
-        server.ehlo()
-        if settings.smtp_password:
-            server.login(settings.smtp_user or from_address, settings.smtp_password)
+        if use_tls:
+            server.starttls()
+            server.ehlo()
+        if password:
+            server.login(user or from_address, password)
         server.sendmail(from_address, [to_address], msg.as_string())
 
     log.info("SMTP küldés sikeres: %s", msg["Message-ID"])
