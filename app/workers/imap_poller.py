@@ -18,6 +18,8 @@ from imap_tools import AND, MailBox, MailboxLoginError, MailMessage
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from datetime import timedelta
+
 from app.modules.jobs.email_classifier import apply_classification, classify_email
 from app.modules.jobs.email_crypto import decrypt_password
 from app.modules.jobs.email_models import (
@@ -248,6 +250,65 @@ def poll_account(db: Session, account: EmailAccount) -> int:
     return count
 
 
+# ── IMAP cleanup: 3 napnál régebben lehúzott levelek törlése a szerverről ──
+
+IMAP_CLEANUP_DAYS = 3
+
+
+def cleanup_old_imap_messages(db: Session, account: EmailAccount) -> int:
+    """A Hub-ba már lehúzott, 3 napnál régebbi emaileket törli az IMAP szerverről.
+
+    Csak azokat az emaileket érinti, amiknek van imap_uid-je ÉS még
+    nincsenek imap_deleted-nek jelölve.
+    """
+    cutoff = utcnow() - timedelta(days=IMAP_CLEANUP_DAYS)
+
+    candidates = (
+        db.execute(
+            select(IncomingEmail)
+            .where(
+                IncomingEmail.account_id == account.id,
+                IncomingEmail.imap_uid.is_not(None),
+                IncomingEmail.imap_deleted.is_(False),
+                IncomingEmail.fetched_at < cutoff,
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    if not candidates:
+        return 0
+
+    try:
+        password = decrypt_password(account.imap_password_encrypted)
+    except ValueError:
+        return 0
+
+    deleted = 0
+    try:
+        with MailBox(account.imap_host, account.imap_port).login(
+            account.imap_user, password
+        ) as mailbox:
+            uids = [e.imap_uid for e in candidates]
+            mailbox.delete(uids)
+
+            for email in candidates:
+                email.imap_deleted = True
+            deleted = len(candidates)
+
+            db.commit()
+    except MailboxLoginError:
+        log.error("IMAP cleanup login sikertelen: %s", account.label)
+    except Exception:
+        log.exception("IMAP cleanup hiba: %s", account.label)
+        db.rollback()
+
+    if deleted:
+        log.info("IMAP cleanup: %s — %d levél törölve a szerverről", account.label, deleted)
+    return deleted
+
+
 def poll_all_accounts(db: Session) -> int:
     """Minden aktív email fiókot végigkérdez.
 
@@ -266,5 +327,6 @@ def poll_all_accounts(db: Session) -> int:
     total = 0
     for account in accounts:
         total += poll_account(db, account)
+        cleanup_old_imap_messages(db, account)
 
     return total
