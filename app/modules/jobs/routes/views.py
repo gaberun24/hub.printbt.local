@@ -13,7 +13,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi import Request as FastAPIRequest
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.modules.jobs.models import (
@@ -549,42 +549,62 @@ def jobs_inbox(
     """Bejövő posta — 5 tabes inbox nézet, keresővel."""
     from app.modules.jobs.email_models import EmailCategory, IncomingEmail
 
-    valid_tabs = {c.value for c in EmailCategory}
+    valid_tabs = {c.value for c in EmailCategory} | {"trash"}
     active_tab = tab if tab in valid_tabs else "work"
     search_q = q.strip()
 
     visible_account_ids = _visible_account_ids(db, user)
 
-    base = select(IncomingEmail).where(
-        IncomingEmail.purged_at.is_(None),
-        IncomingEmail.account_id.in_(visible_account_ids) if visible_account_ids else True,
+    account_filter = (
+        IncomingEmail.account_id.in_(visible_account_ids) if visible_account_ids else True
     )
 
-    if search_q:
-        base = base.where(_inbox_search_filter(search_q))
+    # Törölt emailek száma (trash tab badge)
+    trash_count = db.execute(
+        select(func.count())
+        .select_from(IncomingEmail)
+        .where(IncomingEmail.purged_at.is_not(None), account_filter)
+    ).scalar() or 0
 
-    all_emails = (
-        db.execute(base.order_by(IncomingEmail.received_at.desc()))
-        .scalars()
-        .all()
-    )
-
-    counts: dict[str, int] = {c.value: 0 for c in EmailCategory}
-    for em in all_emails:
-        cat = str(em.effective_category) if em.effective_category else "other"
-        counts[cat] = counts.get(cat, 0) + 1
-
-    # Ha keresünk, ne szűrjünk tabra — mutassuk az összeset
-    if search_q:
+    if active_tab == "trash":
+        all_emails = (
+            db.execute(
+                select(IncomingEmail)
+                .where(IncomingEmail.purged_at.is_not(None), account_filter)
+                .order_by(IncomingEmail.purged_at.desc())
+            )
+            .scalars()
+            .all()
+        )
+        counts = {c.value: 0 for c in EmailCategory}
         filtered = all_emails
-        active_tab = ""
     else:
-        filtered = [
-            em
-            for em in all_emails
-            if (str(em.effective_category) if em.effective_category else "other") == active_tab
-        ]
+        base = select(IncomingEmail).where(
+            IncomingEmail.purged_at.is_(None), account_filter,
+        )
+        if search_q:
+            base = base.where(_inbox_search_filter(search_q))
 
+        all_emails = (
+            db.execute(base.order_by(IncomingEmail.received_at.desc()))
+            .scalars()
+            .all()
+        )
+
+        counts = {c.value: 0 for c in EmailCategory}
+        for em in all_emails:
+            cat = str(em.effective_category) if em.effective_category else "other"
+            counts[cat] = counts.get(cat, 0) + 1
+
+        if search_q:
+            filtered = all_emails
+            active_tab = ""
+        else:
+            filtered = [
+                em
+                for em in all_emails
+                if (str(em.effective_category) if em.effective_category else "other") == active_tab
+            ]
 
     return templates.TemplateResponse(
         request,
@@ -600,6 +620,7 @@ def jobs_inbox(
             "thread": _get_thread(db, filtered[0]) if filtered else [],
             "total_count": len(all_emails),
             "counts": counts,
+            "trash_count": trash_count,
             "active_tab": active_tab,
             "search_q": search_q,
             "smtp_configured": bool(settings.smtp_host),
@@ -624,11 +645,15 @@ def jobs_inbox_detail(
         IncomingEmail,
     )
 
-    valid_tabs = {c.value for c in EmailCategory}
+    valid_tabs = {c.value for c in EmailCategory} | {"trash"}
     active_tab = tab if tab in valid_tabs else "work"
     search_q = q.strip()
 
     visible_account_ids = _visible_account_ids(db, user)
+
+    account_filter = (
+        IncomingEmail.account_id.in_(visible_account_ids) if visible_account_ids else True
+    )
 
     selected = db.execute(
         select(IncomingEmail)
@@ -648,35 +673,51 @@ def jobs_inbox_detail(
 
     thread = _get_thread(db, selected)
 
-    base = select(IncomingEmail).where(
-        IncomingEmail.purged_at.is_(None),
-        IncomingEmail.account_id.in_(visible_account_ids) if visible_account_ids else True,
-    )
+    trash_count = db.execute(
+        select(func.count())
+        .select_from(IncomingEmail)
+        .where(IncomingEmail.purged_at.is_not(None), account_filter)
+    ).scalar() or 0
 
-    if search_q:
-        base = base.where(_inbox_search_filter(search_q))
-
-    all_emails = (
-        db.execute(base.order_by(IncomingEmail.received_at.desc()))
-        .scalars()
-        .all()
-    )
-
-    counts: dict[str, int] = {c.value: 0 for c in EmailCategory}
-    for em in all_emails:
-        cat = str(em.effective_category) if em.effective_category else "other"
-        counts[cat] = counts.get(cat, 0) + 1
-
-    if search_q:
+    if active_tab == "trash":
+        all_emails = (
+            db.execute(
+                select(IncomingEmail)
+                .where(IncomingEmail.purged_at.is_not(None), account_filter)
+                .order_by(IncomingEmail.purged_at.desc())
+            )
+            .scalars()
+            .all()
+        )
+        counts = {c.value: 0 for c in EmailCategory}
         filtered = all_emails
-        active_tab = ""
     else:
-        filtered = [
-            em
-            for em in all_emails
-            if (str(em.effective_category) if em.effective_category else "other") == active_tab
-        ]
+        base = select(IncomingEmail).where(
+            IncomingEmail.purged_at.is_(None), account_filter,
+        )
+        if search_q:
+            base = base.where(_inbox_search_filter(search_q))
 
+        all_emails = (
+            db.execute(base.order_by(IncomingEmail.received_at.desc()))
+            .scalars()
+            .all()
+        )
+
+        counts = {c.value: 0 for c in EmailCategory}
+        for em in all_emails:
+            cat = str(em.effective_category) if em.effective_category else "other"
+            counts[cat] = counts.get(cat, 0) + 1
+
+        if search_q:
+            filtered = all_emails
+            active_tab = ""
+        else:
+            filtered = [
+                em
+                for em in all_emails
+                if (str(em.effective_category) if em.effective_category else "other") == active_tab
+            ]
 
     return templates.TemplateResponse(
         request,
@@ -692,6 +733,7 @@ def jobs_inbox_detail(
             "thread": thread,
             "total_count": len(all_emails),
             "counts": counts,
+            "trash_count": trash_count,
             "active_tab": active_tab,
             "search_q": search_q,
             "smtp_configured": bool(settings.smtp_host),
@@ -944,6 +986,38 @@ def inbox_delete(
     )
     db.commit()
     return RedirectResponse(url=f"/jobs/inbox?tab={tab}", status_code=303)
+
+
+@router.post("/inbox/{email_id}/restore")
+def inbox_restore(
+    email_id: int,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Törölt email visszaállítása (purged_at nullázás)."""
+    from app.modules.jobs.email_models import IncomingEmail
+
+    email = db.get(IncomingEmail, email_id)
+    if email is None:
+        raise HTTPException(404, "Email nem található.")
+
+    visible_account_ids = _visible_account_ids(db, user)
+    if visible_account_ids and email.account_id not in visible_account_ids:
+        raise HTTPException(403, "Nincs hozzáférésed ehhez az emailhez.")
+
+    email.purged_at = None
+    db.add(
+        AuditLog(
+            entity_type=AuditEntityType.EMAIL,
+            entity_id=email.id,
+            action="restore",
+            old_value="purged",
+            new_value=str(email.effective_category or "other"),
+            user_id=user.id,
+        )
+    )
+    db.commit()
+    return RedirectResponse(url="/jobs/inbox?tab=trash", status_code=303)
 
 
 @router.get("/{public_id}", response_class=HTMLResponse)

@@ -52,6 +52,14 @@
     Spam
     <span class="tab-count">{{ counts.spam }}</span>
   </a>
+  {% if trash_count > 0 or active_tab == 'trash' %}
+  <a href="/jobs/inbox?tab=trash"
+     class="tab {% if active_tab == 'trash' %}active{% endif %}" style="text-decoration: none; color: inherit; margin-left: auto;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+    Törölt
+    <span class="tab-count">{{ trash_count }}</span>
+  </a>
+  {% endif %}
 </div>
 
 <div class="inbox">
@@ -167,39 +175,54 @@
       {% endfor %}
 
       <div class="inbox-actions">
-        {% if smtp_configured %}
-          <button type="button" class="btn btn-accent" onclick="openReply()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
-            Válasz
+        {% if active_tab == 'trash' %}
+          <form method="post" action="/jobs/inbox/{{ selected.id }}/restore">
+            <button type="submit" class="btn btn-accent">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+              Visszaállítás
+            </button>
+          </form>
+          {% if selected.purged_at %}
+            {% set days_left = 7 - ((now() - selected.purged_at).days) %}
+            <span style="font-family:var(--font-mono); font-size:11px; color:var(--ink-muted);">
+              Véglegesen törlődik {{ days_left if days_left > 0 else "<1" }} napon belül
+            </span>
+          {% endif %}
+        {% else %}
+          {% if smtp_configured %}
+            <button type="button" class="btn btn-accent" onclick="openReply()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+              Válasz
+            </button>
+          {% endif %}
+          {% if selected.effective_category not in ['spam', 'supplier'] %}
+            <a href="/jobs/new?from_email={{ selected.id }}" class="btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Munkává alakítás
+            </a>
+          {% endif %}
+          <form method="post" action="/jobs/inbox/{{ selected.id }}/recategorize" class="inbox-recat">
+            {% if active_tab != 'work' %}
+              <button type="submit" name="category" value="work" class="btn btn-sm">→ Munka</button>
+            {% endif %}
+            {% if active_tab != 'quote_request' %}
+              <button type="submit" name="category" value="quote_request" class="btn btn-sm">→ Árajánlat</button>
+            {% endif %}
+            {% if active_tab != 'supplier' %}
+              <button type="submit" name="category" value="supplier" class="btn btn-sm btn-ghost">→ Szállító</button>
+            {% endif %}
+            {% if active_tab != 'other' %}
+              <button type="submit" name="category" value="other" class="btn btn-sm btn-ghost">→ Egyéb</button>
+            {% endif %}
+            {% if active_tab != 'spam' %}
+              <button type="submit" name="category" value="spam" class="btn btn-sm btn-ghost">→ Spam</button>
+            {% endif %}
+          </form>
+          <button type="button" class="btn btn-sm" onclick="confirmDelete()" style="margin-left: auto; color: var(--accent); border-color: var(--accent);">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            Törlés
           </button>
         {% endif %}
-        {% if selected.effective_category not in ['spam', 'supplier'] %}
-          <a href="/jobs/new?from_email={{ selected.id }}" class="btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Munkává alakítás
-          </a>
-        {% endif %}
-        <form method="post" action="/jobs/inbox/{{ selected.id }}/recategorize" class="inbox-recat">
-          {% if active_tab != 'work' %}
-            <button type="submit" name="category" value="work" class="btn btn-sm">→ Munka</button>
-          {% endif %}
-          {% if active_tab != 'quote_request' %}
-            <button type="submit" name="category" value="quote_request" class="btn btn-sm">→ Árajánlat</button>
-          {% endif %}
-          {% if active_tab != 'supplier' %}
-            <button type="submit" name="category" value="supplier" class="btn btn-sm btn-ghost">→ Szállító</button>
-          {% endif %}
-          {% if active_tab != 'other' %}
-            <button type="submit" name="category" value="other" class="btn btn-sm btn-ghost">→ Egyéb</button>
-          {% endif %}
-          {% if active_tab != 'spam' %}
-            <button type="submit" name="category" value="spam" class="btn btn-sm btn-ghost">→ Spam</button>
-          {% endif %}
-        </form>
-        <button type="button" class="btn btn-sm" onclick="confirmDelete()" style="margin-left: auto; color: var(--accent); border-color: var(--accent);">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-          Törlés
-        </button>
       </div>
 
       {# ── Törlés megerősítő modal ── #}

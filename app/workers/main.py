@@ -52,6 +52,12 @@ def main() -> None:
                 count = poll_all_accounts(db)
                 if count:
                     log.info("Összesen %d új email feldolgozva.", count)
+
+                from app.workers.purge import purge_old_deleted_emails
+
+                purged = purge_old_deleted_emails(db)
+                if purged:
+                    log.info("%d régi törölt email véglegesen eltávolítva.", purged)
             finally:
                 db.close()
         except Exception:
