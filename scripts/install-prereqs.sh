@@ -1,21 +1,34 @@
 #!/usr/bin/env bash
-# Hub előfeltételek telepítése — Debian 12 (Proxmox LXC)
-# Futtatás: bash /tmp/hub-bootstrap/scripts/install-prereqs.sh
+# Hub előfeltételek telepítése — Debian 12 (Proxmox LXC) vagy Ubuntu 24.04 LTS.
+#
+# Idempotens: többszöri futtatás nem törik el. Root-ként kell futtatni.
+#
+# Futtatás:
+#   sudo bash scripts/install-prereqs.sh
 set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    echo "HIBA: ezt a scriptet root-ként kell futtatni: sudo $0" >&2
+    exit 1
+fi
 
 echo "=== Hub előfeltételek telepítése ==="
 
+export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y \
-  python3.12 python3.12-venv python3.12-dev \
+apt-get install -y --no-install-recommends \
+  python3.12 python3.12-venv python3.12-dev python3-pip \
+  build-essential pkg-config \
+  libffi-dev libssl-dev \
+  libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
+  libharfbuzz0b libxml2 libxslt1.1 \
+  fonts-liberation fonts-dejavu \
   nginx \
   sqlite3 \
   avahi-daemon \
-  clamav clamav-daemon \
-  libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
-  libffi-dev libharfbuzz0b libxml2 libxslt1.1 \
+  clamav clamav-daemon clamav-freshclam \
   restic \
-  curl wget git
+  curl wget git ca-certificates
 
 # ── Hub rendszeruser ──
 if ! id hub &>/dev/null; then
@@ -45,6 +58,19 @@ echo "ClamAV daemon elindult, socket: /var/run/clamav/clamd.ctl"
 # ── Avahi (mDNS) ──
 systemctl enable avahi-daemon
 systemctl start avahi-daemon
+
+# ── GitHub CLI (gh) — privát repo eléréshez ──
+if ! command -v gh &>/dev/null; then
+    echo "GitHub CLI telepítés..."
+    install -d -m 755 /etc/apt/keyrings
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+    chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list
+    apt-get update
+    apt-get install -y gh
+fi
 
 echo ""
 echo "=== Kész! ==="
