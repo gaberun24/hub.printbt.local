@@ -36,8 +36,13 @@ if ! id hub &>/dev/null; then
   echo "hub user létrehozva"
 fi
 
-mkdir -p /opt/hub/{app,data,uploads,venv}
-chown -R hub:hub /opt/hub
+# Csak a stabil mappákat hozzuk létre. Az /opt/hub/app a klónozás
+# célja (ne legyen előre), az /opt/hub/venv-et a setup-app.sh készíti.
+# Ha most előre létrehoznánk az `app` mappát, a `mv /tmp/hub-bootstrap
+# /opt/hub/app` parancs a forrást a meglévő mappa ALÁ tenné — confusing.
+install -d -o hub -g hub -m 755 /opt/hub
+install -d -o hub -g hub -m 755 /opt/hub/data
+install -d -o hub -g hub -m 755 /opt/hub/uploads
 
 # ── ClamAV konfiguráció ──
 echo "ClamAV vírus-definíciók frissítése..."
