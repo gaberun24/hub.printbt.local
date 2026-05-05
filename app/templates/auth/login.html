@@ -3,7 +3,9 @@
 {% block body %}
 <main class="auth-shell">
   <div class="auth-card">
-    <div class="auth-brand">Hub</div>
+    <div class="auth-brand">
+      <img src="{{ url_for('static', path='img/logo.svg') }}" alt="PrintBT Hub" class="brand-logo brand-logo-large">
+    </div>
     <h1 class="auth-title">Belépés</h1>
     <p class="auth-lead">Belső rendszer — csak céges hálón érhető el.</p>
 

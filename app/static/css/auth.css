@@ -47,6 +47,21 @@
   border-radius: 50%;
   margin-bottom: 5px;
 }
+/* Ha a brand-en logo-img van (nem a "Hub" szöveg), elhagyjuk a baseline
+   flex-et és a vermilion pontot — a logo magában áll. */
+.auth-brand:has(.brand-logo) {
+  display: block;
+}
+.auth-brand:has(.brand-logo)::after {
+  display: none;
+}
+.auth-brand .brand-logo-large {
+  display: block;
+  width: auto;
+  max-height: 90px;
+  max-width: 100%;
+  margin: 0 0 8px;
+}
 
 .auth-title {
   font-family: var(--font-display);

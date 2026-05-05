@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title|default("Hub") }} — Hub</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='img/logo.svg') }}">
   {# FOUC-prevention: a `data-theme="dark"` az alapértelmezés, és a user
      választása localStorage-ben ülhet. Ha a user light-ot választott
      korábban, leveszem a default dark-ot mielőtt a CSS parzol. #}
