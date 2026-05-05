@@ -351,6 +351,63 @@ def cmd_refresh_malfini_stock(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import_malfini_variansok(args: argparse.Namespace) -> int:
+    """Saját Malfini-variansok CSV import.
+
+    A `nyomda_rendelo`-ből exportált variant-szintű CSV — NEM a Malfini
+    Standard Pricelist. A CSV-ben szereplő ~2400 variant Item-et létrehozza/
+    frissíti, és a CSV-ben NEM szereplő meglévő Malfini-Item-eket
+    deaktiválja (kivéve --keep-old kapcsolóval).
+    """
+    init_db()
+
+    from pathlib import Path
+
+    from app.modules.rendelo.malfini_variansok import import_variansok_csv
+
+    csv_path = Path(args.csv_file)
+    if not csv_path.exists():
+        print(f"HIBA: CSV nem létezik: {csv_path}", file=sys.stderr)
+        return 1
+
+    print(f"CSV: {csv_path}")
+    print(f"Mód:           {'KEEP-OLD' if args.keep_old else 'régi tételek INACTIVE-ra állítjuk'}")
+    if args.dry_run:
+        print("DRY-RUN — nem commit-olunk")
+    print()
+
+    with SessionLocal() as db:
+        try:
+            stats = import_variansok_csv(
+                db,
+                csv_path,
+                deactivate_missing=not args.keep_old,
+                dry_run=args.dry_run,
+            )
+        except ValueError as exc:
+            print(f"HIBA: {exc}", file=sys.stderr)
+            return 1
+
+        print(f"Sorok:          {stats.rows_seen}")
+        print(f"Új:             {stats.added}")
+        print(f"Frissítve:      {stats.updated}")
+        print(f"Skipped:        {stats.skipped_invalid}")
+        print(f"Deaktiválva:    {stats.deactivated}")
+        if stats.by_category:
+            print()
+            print("Kategóriánként:")
+            for cat, n in sorted(stats.by_category.items(), key=lambda x: -x[1]):
+                print(f"  {cat:<20}  {n}")
+        if stats.errors:
+            print()
+            print(f"Hibák ({len(stats.errors)}):")
+            for err in stats.errors[:30]:
+                print(f"  • {err}")
+            if len(stats.errors) > 30:
+                print(f"  ... és további {len(stats.errors) - 30}")
+    return 0
+
+
 def cmd_seed_rendelo_categories(_args: argparse.Namespace) -> int:
     """A Rendelő modul alap-kategóriáit beülteti / frissíti idempotensen.
 
@@ -495,6 +552,23 @@ def main() -> int:
         help="A Rendelő alap-kategóriáit beülteti / frissíti (Toner, Festék, …)",
     )
     p_seed_cats.set_defaults(func=cmd_seed_rendelo_categories)
+
+    p_var = sub.add_parser(
+        "import-malfini-variansok",
+        help="Saját Malfini-variansok CSV import (~2400 variant Item)",
+    )
+    p_var.add_argument("csv_file", help="A CSV fájl elérési útja")
+    p_var.add_argument(
+        "--keep-old",
+        action="store_true",
+        help="A CSV-ben nem szereplő régi Malfini-Itemeket NE deaktiváljuk",
+    )
+    p_var.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validál de nem commit-ol",
+    )
+    p_var.set_defaults(func=cmd_import_malfini_variansok)
 
     p_reclass = sub.add_parser(
         "reclassify-emails",
