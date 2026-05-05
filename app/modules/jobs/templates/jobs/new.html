@@ -197,4 +197,19 @@
     <a href="/jobs" class="btn btn-ghost">Mégsem</a>
   </div>
 </form>
+
+<script>
+  // Határidő prefill: aktuális dátum-idő (kliens-oldali, mert a szerver
+  // UTC-ben fut, a böngésző viszont a user lokális idejét tudja). Csak
+  // akkor írjuk be ha a mező még üres — különben felülírnánk az értéket.
+  (function () {
+    const input = document.querySelector('input[name="deadline"]');
+    if (!input || input.value) return;
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    input.value =
+      d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+      'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  })();
+</script>
 {% endblock %}
