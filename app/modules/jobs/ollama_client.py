@@ -26,32 +26,8 @@ from app.modules.jobs.email_models import IncomingEmail
 
 log = logging.getLogger(__name__)
 
-# Ugyanaz a system prompt szerkezete mint a Gemini/LM Studio kliensben —
-# a kategóriák, magyar kontextus és kötelező JSON-output egységes.
-_SYSTEM_PROMPT = """\
-Te egy nyomdai cég (PrintBT / Gyorsnyomda) belső rendszerének email-osztályozója vagy.
-
-Az emaileket az alábbi kategóriák egyikébe kell sorolnod:
-
-- work: Új munkamegrendelés, gyártási megbízás, grafikai anyag küldése, \
-konkrét nyomtatási/gravírozási/UV feladat kérése. Ha az ügyfél fájlt küld \
-vagy konkrét darabszámot/méretet említ, az szinte biztos work.
-- quote_request: Árajánlat-kérés — az ügyfél árat kérdez, mennyibe kerülne, \
-tudnátok-e csinálni, stb. Nincs konkrét megrendelés, csak érdeklődés.
-- other: Nem illik a fentiekbe — kérdés, visszajelzés, köszönet, általános \
-levelezés. Ha bizonytalan vagy, inkább ide sorold.
-- spam: Reklám, hírlevél, automatikus értesítés, marketing kampány.
-
-FONTOS: A „supplier" kategóriát NE használd — a szállítói emaileket már \
-korábban kiszűrtük, ide nem jutnak el.
-
-A válaszod KIZÁRÓLAG egy JSON objektum legyen, az alábbi mezőkkel:
-{
-  "category": "work" | "quote_request" | "other" | "spam",
-  "confidence": 0.0-1.0 közötti szám,
-  "summary": "1-2 mondatos magyar összefoglaló az email tartalmáról"
-}
-"""
+# A system prompt, a prompt-builder és a kategória-lista is közös az AI
+# kliensek között — lásd `app.modules.jobs.ai_settings`.
 
 
 def _post_chat(url: str, body: dict, timeout: int) -> dict | None:
@@ -83,7 +59,11 @@ def classify_with_ollama(db: Session, email: IncomingEmail):
     Visszaad egy ClassificationResult-ot, vagy None-t ha hiba van
     (a classifier ekkor RULE_FALLBACK / OTHER-re esik).
     """
-    from app.modules.jobs.ai_settings import get_ai_config
+    from app.modules.jobs.ai_settings import (
+        EMAIL_CLASSIFIER_SYSTEM_PROMPT,
+        build_email_prompt,
+        get_ai_config,
+    )
     from app.modules.jobs.email_classifier import ClassificationResult
     from app.modules.jobs.email_models import ClassifiedBy, EmailCategory
 
@@ -91,16 +71,12 @@ def classify_with_ollama(db: Session, email: IncomingEmail):
     if not cfg.ollama_url:
         return None
 
-    subject = email.subject or "(nincs tárgy)"
-    body = (email.body_text or "")[:3000]
-    from_info = f"{email.from_name or ''} <{email.from_address}>".strip()
-
-    user_prompt = f"Feladó: {from_info}\nTárgy: {subject}\n\n{body}"
+    user_prompt = build_email_prompt(email)
 
     chat_body = {
         "model": cfg.ollama_model,
         "messages": [
-            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "system", "content": EMAIL_CLASSIFIER_SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
         "stream": False,

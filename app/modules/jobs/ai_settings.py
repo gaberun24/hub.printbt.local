@@ -1,4 +1,4 @@
-"""AI provider runtime config.
+"""AI provider runtime config + email prompt builder.
 
 A runtime-ban változtatható AI beállítások a `system_settings` táblában
 élnek (admin UI-ról szerkeszthetők). A `.env` továbbra is fallback —
@@ -85,6 +85,96 @@ class AIConfig:
     lm_studio_url: str = ""
     lm_studio_model: str = "gemma-4-e4b"
     lm_studio_timeout_sec: int = 60
+
+
+# ── Közös prompt-builder az email kliensekhez ─────────────────
+
+
+# Közös system prompt — minden AI kliens (Gemini, Ollama, LM Studio) ezt
+# használja, hogy a kategória-listák és az osztályozási logika konzisztens
+# legyen a provider-ek között.
+EMAIL_CLASSIFIER_SYSTEM_PROMPT = """\
+Te egy nyomdai cég (PrintBT / Gyorsnyomda) belső rendszerének email-osztályozója vagy.
+
+Az emaileket az alábbi kategóriák egyikébe kell sorolnod:
+
+- work: Új munkamegrendelés, gyártási megbízás, grafikai anyag küldése, \
+konkrét nyomtatási/gravírozási/UV feladat kérése. Ha az ügyfél fájlt küld \
+vagy konkrét darabszámot/méretet említ, az szinte biztos work. \
+**Ha az emailben csak csatolmány van (nincs vagy nagyon rövid a szöveg), \
+az általában work — valaki ki akarja nyomtatni / le akarja gyártani azt amit küld.**
+- quote_request: Árajánlat-kérés — az ügyfél árat kérdez, mennyibe kerülne, \
+tudnátok-e csinálni, stb. Nincs konkrét megrendelés, csak érdeklődés.
+- other: Nem illik a fentiekbe — kérdés, visszajelzés, köszönet, általános \
+levelezés. Ha bizonytalan vagy, inkább ide sorold.
+- spam: Reklám, hírlevél, automatikus értesítés, marketing kampány, csaló email.
+
+FONTOS: A „supplier" kategóriát NE használd — a szállítói emaileket már \
+korábban kiszűrtük, ide nem jutnak el.
+
+A válaszod KIZÁRÓLAG egy JSON objektum legyen, az alábbi mezőkkel:
+{
+  "category": "work" | "quote_request" | "other" | "spam",
+  "confidence": 0.0-1.0 közötti szám,
+  "summary": "1-2 mondatos magyar összefoglaló az email tartalmáról"
+}
+"""
+
+
+def _strip_html(html: str, max_len: int = 3000) -> str:
+    """Egyszerű HTML→text konverzió. Stdlib HTMLParser, nincs új dep."""
+    from html.parser import HTMLParser
+
+    class _Stripper(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.parts: list[str] = []
+
+        def handle_data(self, data: str) -> None:
+            self.parts.append(data)
+
+    s = _Stripper()
+    try:
+        s.feed(html)
+    except Exception:
+        return html[:max_len]
+    text = " ".join(p.strip() for p in s.parts if p.strip())
+    return text[:max_len]
+
+
+def build_email_prompt(email) -> str:  # noqa: ANN001 — IncomingEmail körkörös import
+    """Email tartalom strukturált prompt-építése — feladó + tárgy + csatolmány-
+    fájlnevek + body (HTML fallback-kel ha a plain üres). Egységes minden
+    AI kliens számára.
+
+    A csatolmány-fájlnevek átadása fontos: a magyar nyomdai workflow-ban
+    sokszor csak egy fájlt küld az ügyfél ('nyomdakesz.pdf') szöveg nélkül,
+    ami egyértelmű work — a fájlnév alapján a modell ezt tudja értelmezni.
+    """
+    subject = email.subject or "(nincs tárgy)"
+    from_info = f"{email.from_name or ''} <{email.from_address}>".strip()
+
+    # Body: plain text, fallback HTML→text
+    body = (email.body_text or "").strip()
+    if not body and getattr(email, "body_html", None):
+        body = _strip_html(email.body_html)
+    body = body[:3000]
+
+    # Csatolmány-fájlnevek
+    attachments = getattr(email, "attachments", None) or []
+    att_names = [a.filename for a in attachments if getattr(a, "filename", None)]
+
+    parts = [f"Feladó: {from_info}", f"Tárgy: {subject}"]
+    if att_names:
+        parts.append(f"Csatolmányok ({len(att_names)} db): " + ", ".join(att_names))
+    if body:
+        parts.append("")
+        parts.append(body)
+    else:
+        parts.append("")
+        parts.append("(nincs szöveges tartalom)")
+
+    return "\n".join(parts)
 
 
 def get_ai_config(db: Session) -> AIConfig:

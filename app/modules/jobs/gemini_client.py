@@ -25,30 +25,8 @@ log = logging.getLogger(__name__)
 _clients: dict[str, object] = {}
 
 # A prompt megmondja a Gemini-nek hogy nyomdai cég emailjeit kell osztályozni
-_SYSTEM_PROMPT = """\
-Te egy nyomdai cég (PrintBT / Gyorsnyomda) belső rendszerének email-osztályozója vagy.
-
-Az emaileket az alábbi kategóriák egyikébe kell sorolnod:
-
-- work: Új munkamegrendelés, gyártási megbízás, grafikai anyag küldése, \
-konkrét nyomtatási/gravírozási/UV feladat kérése. Ha az ügyfél fájlt küld \
-vagy konkrét darabszámot/méretet említ, az szinte biztos work.
-- quote_request: Árajánlat-kérés — az ügyfél árat kérdez, mennyibe kerülne, \
-tudnátok-e csinálni, stb. Nincs konkrét megrendelés, csak érdeklődés.
-- other: Nem illik a fentiekbe — kérdés, visszajelzés, köszönet, általános \
-levelezés. Ha bizonytalan vagy, inkább ide sorold.
-- spam: Reklám, hírlevél, automatikus értesítés, marketing kampány.
-
-FONTOS: A „supplier" kategóriát NE használd — a szállítói emaileket már \
-korábban kiszűrtük, ide nem jutnak el.
-
-Válaszolj KIZÁRÓLAG az alábbi JSON formátumban (semmi más szöveg):
-{
-  "category": "work|quote_request|other|spam",
-  "confidence": 0.0-1.0,
-  "summary": "1-2 mondatos magyar összefoglaló az email tartalmáról"
-}
-"""
+# A system prompt és a prompt-builder közös az AI kliensek között —
+# lásd `app.modules.jobs.ai_settings`.
 
 
 def _get_client(api_key: str):
@@ -75,7 +53,11 @@ def classify_with_gemini(db: Session, email: IncomingEmail):
 
     Visszaad egy ClassificationResult-ot, vagy None-t ha hiba van.
     """
-    from app.modules.jobs.ai_settings import get_ai_config
+    from app.modules.jobs.ai_settings import (
+        EMAIL_CLASSIFIER_SYSTEM_PROMPT,
+        build_email_prompt,
+        get_ai_config,
+    )
     from app.modules.jobs.email_classifier import ClassificationResult
     from app.modules.jobs.email_models import ClassifiedBy, EmailCategory
 
@@ -84,24 +66,14 @@ def classify_with_gemini(db: Session, email: IncomingEmail):
     if client is None:
         return None
 
-    # Email tartalom összeállítása a prompt-hoz
-    subject = email.subject or "(nincs tárgy)"
-    body = (email.body_text or "")[:3000]  # Max 3000 karakter
-    from_info = f"{email.from_name or ''} <{email.from_address}>".strip()
-
-    user_prompt = f"""\
-Feladó: {from_info}
-Tárgy: {subject}
-
-{body}
-"""
+    user_prompt = build_email_prompt(email)
 
     try:
         response = client.models.generate_content(
             model=cfg.gemini_model,
             contents=user_prompt,
             config={
-                "system_instruction": _SYSTEM_PROMPT,
+                "system_instruction": EMAIL_CLASSIFIER_SYSTEM_PROMPT,
                 "temperature": 0.1,  # Alacsony — determinisztikus osztályozás
                 "max_output_tokens": 300,
             },
