@@ -2474,3 +2474,87 @@ select.compose-input {
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink-subtle); }
 
+
+/* ─────────────────────── Print mód ───────────────────────────────────
+   A Rendelő igény-detail nyomtatáskor: chrome (sidebar, topbar, gombok,
+   composer, jobb oldali timeline-panel) elrejtve, a tartalom full-width
+   legyen, fekete-fehér tipográfia. */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+    background-image: none !important;
+  }
+
+  /* Chrome elrejtése */
+  aside.sidebar,
+  header.topbar,
+  #toast-container,
+  .action-bar,
+  .composer,
+  .btn,
+  .btn-accent,
+  .btn-ghost,
+  .btn-primary,
+  /* A jobb oldali idővonal-panel + beszállító-form a Rendelő detail-en */
+  .request-detail-grid > div:nth-child(2) {
+    display: none !important;
+  }
+
+  /* Layout: full-width detail */
+  .app {
+    display: block !important;
+  }
+  .main { padding: 0 !important; margin: 0 !important; }
+  .content { padding: 0 !important; }
+  .request-detail-grid {
+    display: block !important;
+    grid-template-columns: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Panel-keretek halványabbak nyomtatásban */
+  .panel {
+    background: #fff !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+    margin-bottom: 12px !important;
+  }
+  .panel-header {
+    border-bottom: 1px solid #ccc !important;
+  }
+
+  /* Hero + jelölések fekete-fehéren */
+  .job-hero {
+    background: #fff !important;
+    border: 1px solid #000 !important;
+    color: #000 !important;
+  }
+  .req-status-pill,
+  .badge,
+  .rendelo-cat-tag {
+    border: 1px solid #000 !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  /* Kép: max 8 cm magas, ne nyúljon át a lapon */
+  .panel img {
+    max-height: 8cm !important;
+    page-break-inside: avoid;
+  }
+
+  /* Linkek printben aláhúzottak (jelzés hogy link volt) */
+  a { color: #000 !important; text-decoration: none; }
+
+  /* Esemény-rekordok ne szakadjanak ketté */
+  .timeline-item,
+  .comment,
+  .task-row {
+    page-break-inside: avoid;
+  }
+}
+
