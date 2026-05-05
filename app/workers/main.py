@@ -58,6 +58,11 @@ def main() -> None:
                 purged = purge_old_deleted_emails(db)
                 if purged:
                     log.info("%d régi törölt email véglegesen eltávolítva.", purged)
+
+                # Malfini stock-szinkron — hétköznap 7-18 helyi idő, fél órás interval
+                from app.workers.malfini_sync import maybe_refresh_malfini_stock
+
+                maybe_refresh_malfini_stock(db)
             finally:
                 db.close()
         except Exception:
