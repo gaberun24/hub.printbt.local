@@ -165,6 +165,119 @@ def cmd_rescan_attachments(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reclassify_emails(args: argparse.Namespace) -> int:
+    """Meglévő emailek újra-osztályozása az aktuális AI provider-rel.
+
+    Default: csak a `RULE_FALLBACK` (= AI nem volt elérhető a poll idején)
+    classified_by-jakat. `--all` kapcsolóval a meglévő AI-eredményeket is
+    átfuttatja (Gemini→Ollama váltáskor pl. hasznos).
+
+    A manuálisan átsorolt emailek `manual_category`-ja érintetlen marad —
+    az `effective_category` nem változik, csak a háttér `category` mező frissül.
+    A `RULE_CUSTOMER` / `RULE_SUPPLIER` / `RULE_SPAM` szabály-alapú
+    kategóriákhoz nem nyúlunk (determinisztikus, nem érdemes újra-futtatni).
+    """
+    init_db()
+
+    from collections import Counter
+
+    from app.modules.jobs.ai_settings import get_ai_config
+    from app.modules.jobs.email_classifier import apply_classification, classify_email
+    from app.modules.jobs.email_models import ClassifiedBy, IncomingEmail
+    from app.shared.models import AuditEntityType, AuditLog
+
+    with SessionLocal() as db:
+        cfg = get_ai_config(db)
+        if cfg.provider == "none":
+            print(
+                "HIBA: nincs aktív AI provider. Állítsd be először az "
+                "Admin → AI beállítások oldalon.",
+                file=sys.stderr,
+            )
+            return 1
+
+        # Mit célozunk meg?
+        if args.all:
+            # Minden AI-osztályozott rekord (manual NEM, rule_* NEM)
+            targets_filter = [
+                ClassifiedBy.RULE_FALLBACK,
+                ClassifiedBy.GEMINI,
+                ClassifiedBy.OLLAMA,
+                ClassifiedBy.LM_STUDIO,
+            ]
+            mode_label = "minden AI-osztályozott"
+        else:
+            targets_filter = [ClassifiedBy.RULE_FALLBACK]
+            mode_label = "csak RULE_FALLBACK (AI nélküli) emailek"
+
+        stmt = select(IncomingEmail).where(
+            IncomingEmail.classified_by.in_([c.value for c in targets_filter]),
+            IncomingEmail.purged_at.is_(None),
+        ).order_by(IncomingEmail.received_at.desc())
+
+        if args.limit:
+            stmt = stmt.limit(args.limit)
+
+        targets = db.execute(stmt).scalars().all()
+
+        if not targets:
+            print(f"Nincs újra-osztályozandó email ({mode_label}).")
+            return 0
+
+        print(f"Reclassify: {len(targets)} email · provider: {cfg.provider} · módja: {mode_label}")
+        print()
+
+        category_changes: Counter = Counter()
+        unchanged = 0
+
+        for em in targets:
+            old_category = str(em.category) if em.category else "—"
+            old_classifier = str(em.classified_by) if em.classified_by else "—"
+
+            try:
+                result = classify_email(db, em)
+            except Exception as exc:
+                print(f"  ✗ #{em.id} hiba: {exc}")
+                continue
+
+            new_category = str(result.category)
+            apply_classification(em, result)
+
+            if new_category != old_category:
+                category_changes[f"{old_category} → {new_category}"] += 1
+                marker = "→"
+                # Audit log csak változásnál
+                db.add(
+                    AuditLog(
+                        entity_type=AuditEntityType.EMAIL,
+                        entity_id=em.id,
+                        action="reclassify",
+                        old_value=f"{old_category} ({old_classifier})",
+                        new_value=f"{new_category} ({result.classified_by})",
+                    )
+                )
+            else:
+                unchanged += 1
+                marker = "·"
+
+            subject = (em.subject or "(nincs tárgy)")[:50]
+            print(
+                f"  {marker} #{em.id:>4}  {old_category:<14} → {new_category:<14}  {subject}"
+            )
+
+        db.commit()
+
+        print()
+        print(f"Eredmény: {unchanged} változatlan, {sum(category_changes.values())} átkategorizálva")
+        if category_changes:
+            print()
+            print("Átmenetek:")
+            for change, n in sorted(category_changes.items(), key=lambda x: -x[1]):
+                print(f"  {change:<30}  {n}")
+
+    return 0
+
+
 def cmd_generate_invite(args: argparse.Namespace) -> int:
     init_db()
     flags = _parse_roles(args.roles)
@@ -250,6 +363,23 @@ def main() -> int:
         help="A `clean` státuszúakat is újraszkenneli (pl. ha új vírus-def jött)",
     )
     p_rescan.set_defaults(func=cmd_rescan_attachments)
+
+    p_reclass = sub.add_parser(
+        "reclassify-emails",
+        help="Emailek újra-osztályozása az aktuális AI provider-rel",
+    )
+    p_reclass.add_argument(
+        "--all",
+        action="store_true",
+        help="A meglévő AI-eredményeket is átfuttatja (default: csak RULE_FALLBACK)",
+    )
+    p_reclass.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max ennyi email-en futtatja (a legfrissebbektől)",
+    )
+    p_reclass.set_defaults(func=cmd_reclassify_emails)
 
     args = parser.parse_args()
     return args.func(args)
