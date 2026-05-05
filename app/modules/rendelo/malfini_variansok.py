@@ -94,6 +94,7 @@ def import_variansok_csv(
     *,
     deactivate_missing: bool = True,
     dry_run: bool = False,
+    batch_size: int = 200,
 ) -> VariantImportStats:
     """Saját Malfini-variansok CSV → Item rekordok (brand=Malfini).
 
@@ -123,6 +124,7 @@ def import_variansok_csv(
     existing_by_code: dict[str, Item] = {it.code: it for it in existing_items if it.code}
 
     seen_codes: set[str] = set()
+    rows_in_batch = 0  # batch_size soronként commit-olunk a hosszú lock elkerülésére
 
     with csv_path.open(encoding="utf-8-sig") as f:
         reader = csv.DictReader(f, delimiter=";")
@@ -208,6 +210,12 @@ def import_variansok_csv(
                 )
                 stats.added += 1
 
+            rows_in_batch += 1
+            if not dry_run and rows_in_batch >= batch_size:
+                # Batch commit a lock-ablak rövidítésére
+                db.commit()
+                rows_in_batch = 0
+
     # Régi Malfini Item-ek deaktiválása amik nem szerepelnek a CSV-ben
     if deactivate_missing:
         for it in existing_items:
@@ -218,6 +226,7 @@ def import_variansok_csv(
     if dry_run:
         db.rollback()
     else:
+        # Maradék (utolsó batch + deaktiválások)
         db.commit()
 
     return stats

@@ -28,7 +28,10 @@ def _set_sqlite_pragma(dbapi_connection, _connection_record):
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.execute("PRAGMA busy_timeout=5000")
+    # 30 másodperc — a webes UI keep-aliveból, a worker pollerből és a CLI
+    # bulk-import-okból egyszerre érkező lock-konfliktusoknál (pl. ~2400
+    # variant insert) megéri inkább várni mint elszállni "database is locked"-kal.
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.close()
 
 
