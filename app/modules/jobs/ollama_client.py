@@ -107,9 +107,14 @@ def classify_with_ollama(db: Session, email: IncomingEmail):
         # Az Ollama JSON-mode garantálja a valid JSON outputot — nem kell
         # markdown code-fence stripping mint a generic OpenAI-protocolnál.
         "format": "json",
+        # Reasoning modellek (Gemma4, DeepSeek-R1, stb.) a `thinking` mezőbe
+        # hosszú belső gondolkodást írnak, ami elfogyasztaná a num_predict
+        # tokeneket még a JSON-content előtt → üres content. Ollama 0.4+
+        # támogatja a `think: false` flag-et, az ismeretlen verziók ignorálják.
+        "think": False,
         "options": {
             "temperature": 0.1,
-            "num_predict": 300,  # max output token
+            "num_predict": 2000,  # max output token — hagyjon helyet a JSON-nak
         },
     }
 
@@ -124,10 +129,21 @@ def classify_with_ollama(db: Session, email: IncomingEmail):
         log.warning("Ollama válasz váratlan szerkezet: %.300s", str(data))
         return None
 
+    if not raw or not raw.strip():
+        # Reasoning modell (think) elfogyasztotta a num_predict-et — nincs content.
+        # Diagnosztikai log a thinking-ből, hogy lássuk mit "gondolkodott".
+        thinking = (data.get("message") or {}).get("thinking") or ""
+        log.warning(
+            "Ollama üres content-et adott (model=%s). Thinking: %.500s",
+            cfg.ollama_model,
+            thinking,
+        )
+        return None
+
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
-        log.warning("Ollama JSON-mode mégis nem-JSON-t adott: %.300s", raw)
+        log.warning("Ollama JSON-mode mégis nem-JSON-t adott: %.500s", raw)
         return None
 
     category_str = parsed.get("category", "other")
