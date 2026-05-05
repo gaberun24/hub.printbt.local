@@ -61,11 +61,19 @@ _SPAM_SENDER_PATTERNS: list[re.Pattern[str]] = [
 ]
 
 _SPAM_BODY_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"unsubscribe|leiratkoz", re.IGNORECASE),
     re.compile(r"you\s+are\s+receiving\s+this", re.IGNORECASE),
     re.compile(r"email\s+preferences", re.IGNORECASE),
     re.compile(r"view\s+in\s+browser", re.IGNORECASE),
     re.compile(r"email\s+c[íi]m.*(t[öo]rl|leiratkoz)", re.IGNORECASE),
+]
+
+# Erős spam minták — egyetlen találat is elég (a tárgyban VAGY a body-ban).
+# A user feedback alapján: ha a "spam" vagy "leiratkozás"/"unsubscribe" szó
+# bárhol szerepel az emailben, gyakorlatilag mindig marketing / hírlevél.
+_HARD_SPAM_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"\bspam\b", re.IGNORECASE),
+    re.compile(r"unsubscribe", re.IGNORECASE),
+    re.compile(r"leiratkoz[áaoó]", re.IGNORECASE),  # leiratkozás, leiratkozó, leiratkozni
 ]
 
 # Spam feladó domain-ek — ezek szinte mindig spam
@@ -126,16 +134,22 @@ def _check_spam(subject: str | None, body_text: str | None, from_address: str) -
         if pat.search(addr):
             return True
 
-    # Subject minták
     subj = subject or ""
+    body = (body_text or "")[:2000]
+    combined = f"{subj}\n{body}"
+
+    # Erős spam minták — egyetlen találat is elég (subject vagy body)
+    for pat in _HARD_SPAM_PATTERNS:
+        if pat.search(combined):
+            return True
+
+    # Subject minták (gyenge — csak a tárgyban)
     for pat in _SPAM_SUBJECT_PATTERNS:
         if pat.search(subj):
             return True
 
-    # Body minták (csak az első 2000 karakterben keresünk — hatékonyság)
-    body = (body_text or "")[:2000]
+    # Body minták — legalább 2 különböző találat kell hozzá
     spam_hits = sum(1 for pat in _SPAM_BODY_PATTERNS if pat.search(body))
-    # Ha legalább 2 body-minta talál, nagy eséllyel spam
     return spam_hits >= 2  # noqa: PLR2004
 
 
