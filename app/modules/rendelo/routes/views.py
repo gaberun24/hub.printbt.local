@@ -10,10 +10,10 @@ import json
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi import Request as FastAPIRequest
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.modules.rendelo.models import (
@@ -227,13 +227,15 @@ def rendelo_new_form(
 
 
 @router.post("/new")
-def rendelo_new_submit(
+async def rendelo_new_submit(
     request: FastAPIRequest,
     category_id: int = Form(...),
     note: str | None = Form(None),
     line_title: list[str] = Form(default_factory=list),
     line_qty: list[str] = Form(default_factory=list),
     line_unit: list[str] = Form(default_factory=list),
+    line_item_id: list[str] = Form(default_factory=list),
+    image: UploadFile | None = File(None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -243,14 +245,21 @@ def rendelo_new_submit(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    cleaned: list[tuple[str, Decimal, str]] = []
-    for raw_title, raw_qty, raw_unit in zip(line_title, line_qty, line_unit, strict=False):
+    cleaned: list[tuple[str, Decimal, str, int | None]] = []
+    for idx, (raw_title, raw_qty, raw_unit) in enumerate(
+        zip(line_title, line_qty, line_unit, strict=False)
+    ):
         title = (raw_title or "").strip()
         if not title:
             continue
         qty = _parse_qty(raw_qty) or Decimal("1")
         unit = (raw_unit or "db").strip() or "db"
-        cleaned.append((title, qty, unit))
+        # item_id opcionális — autocomplete vagy cascade tölti
+        raw_item_id = line_item_id[idx] if idx < len(line_item_id) else ""
+        item_id_val: int | None = None
+        if raw_item_id and raw_item_id.strip().isdigit():
+            item_id_val = int(raw_item_id.strip())
+        cleaned.append((title, qty, unit, item_id_val))
 
     if not cleaned and not (note and note.strip()):
         return RedirectResponse(
@@ -258,16 +267,30 @@ def rendelo_new_submit(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
+    # Kép feltöltés (opcionális)
+    image_path = None
+    if image is not None and image.filename:
+        from app.modules.rendelo.uploads import save_uploaded_image
+
+        try:
+            image_path = save_uploaded_image(image)
+        except ValueError as exc:
+            return RedirectResponse(
+                url=f"/rendelo/new?error=K%C3%A9p+hiba%3A+{exc}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+
     req = Request(
         category_id=category_id,
         note=(note or "").strip() or None,
+        image_path=image_path,
         requested_by_id=user.id,
         status=RequestStatus.NEW,
     )
     db.add(req)
     db.flush()
 
-    for idx, (title, qty, unit) in enumerate(cleaned, start=1):
+    for idx, (title, qty, unit, item_id_val) in enumerate(cleaned, start=1):
         db.add(
             RequestLine(
                 request_id=req.id,
@@ -275,6 +298,7 @@ def rendelo_new_submit(
                 title=title,
                 qty=qty,
                 unit=unit,
+                item_id=item_id_val,
             )
         )
 
@@ -406,6 +430,214 @@ def rendelo_change_state(
 
 
 # ───────────────────────── comments ─────────────────────────
+
+
+@router.get("/archive", response_class=HTMLResponse)
+def rendelo_archive(
+    request: FastAPIRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
+    category: int | None = Query(None),
+    q: str | None = Query(None),
+) -> HTMLResponse:
+    """Lezárt és érkezett igények arcívuma. Default 2 év, dátum-szűrőkkel."""
+    from datetime import datetime
+
+    # Default ablak: utolsó 2 év
+    cutoff = utcnow() - timedelta(days=730)
+
+    stmt = (
+        select(Request)
+        .options(
+            selectinload(Request.lines),
+            selectinload(Request.requested_by),
+            selectinload(Request.ordered_by),
+            selectinload(Request.category),
+        )
+        .where(
+            Request.status.in_([RequestStatus.ARRIVED, RequestStatus.CANCELLED]),
+        )
+    )
+
+    # Dátum-szűrők (a created_at-on)
+    parsed_from = None
+    parsed_to = None
+    if from_date:
+        try:
+            parsed_from = datetime.fromisoformat(from_date)
+        except ValueError:
+            parsed_from = None
+    if to_date:
+        try:
+            parsed_to = datetime.fromisoformat(to_date)
+            # +1 nap, hogy az adott napot egészként vegyük figyelembe
+            parsed_to = parsed_to.replace(hour=23, minute=59, second=59)
+        except ValueError:
+            parsed_to = None
+
+    if parsed_from:
+        stmt = stmt.where(Request.created_at >= parsed_from)
+    else:
+        stmt = stmt.where(Request.created_at >= cutoff)
+    if parsed_to:
+        stmt = stmt.where(Request.created_at <= parsed_to)
+
+    if category is not None:
+        stmt = stmt.where(Request.category_id == category)
+
+    if q and q.strip():
+        like = f"%{q.strip().lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Request.note).like(like),
+                func.lower(Request.supplier).like(like),
+                func.lower(Request.order_ref).like(like),
+            )
+        )
+
+    stmt = stmt.order_by(Request.created_at.desc())
+    items = db.execute(stmt).scalars().all()
+
+    # Hónap-csoportosítás (YYYY-MM)
+    by_month: dict[str, list[Request]] = {}
+    for it in items:
+        key = it.created_at.strftime("%Y-%m")
+        by_month.setdefault(key, []).append(it)
+
+    return templates.TemplateResponse(
+        request,
+        "rendelo/archive.html",
+        {
+            "user": user,
+            "title": "Archívum",
+            "topbar_title": "Archívum",
+            "topbar_subtitle": f"{len(items)} lezárt igény",
+            "items": items,
+            "by_month": by_month,
+            "categories": _categories(db),
+            "from_date": from_date or "",
+            "to_date": to_date or "",
+            "active_category": category,
+            "q": q or "",
+            **sidebar_context(db, user, active_key="rendelo_list"),
+        },
+    )
+
+
+@router.get("/{request_id}/edit", response_class=HTMLResponse)
+def rendelo_edit_form(
+    request_id: int,
+    request: FastAPIRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+    error: str | None = Query(None),
+) -> HTMLResponse:
+    """Igény szerkesztése — csak `new` állapotban, és csak a felvevő vagy admin."""
+    obj = _load_request_or_404(db, request_id)
+    if obj.status != RequestStatus.NEW:
+        raise HTTPException(409, "Csak `new` státuszú igényt lehet szerkeszteni.")
+    if not (user.is_admin or obj.requested_by_id == user.id):
+        raise HTTPException(403, "Csak a felvevő vagy admin szerkesztheti.")
+
+    return templates.TemplateResponse(
+        request,
+        "rendelo/new.html",
+        {
+            "user": user,
+            "title": f"Igény #{obj.id} szerkesztése",
+            "topbar_title": f"#{obj.id} szerkesztése",
+            "topbar_subtitle": "csak `új` állapotban szerkeszthető",
+            "categories": _categories(db),
+            "error": error,
+            "edit_request": obj,
+            **sidebar_context(db, user, active_key="rendelo_list"),
+        },
+    )
+
+
+@router.post("/{request_id}/edit")
+async def rendelo_edit_submit(
+    request_id: int,
+    request: FastAPIRequest,
+    category_id: int = Form(...),
+    note: str | None = Form(None),
+    line_title: list[str] = Form(default_factory=list),
+    line_qty: list[str] = Form(default_factory=list),
+    line_unit: list[str] = Form(default_factory=list),
+    line_item_id: list[str] = Form(default_factory=list),
+    image: UploadFile | None = File(None),
+    remove_image: str | None = Form(None),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    obj = _load_request_or_404(db, request_id)
+    if obj.status != RequestStatus.NEW:
+        raise HTTPException(409, "Csak `new` státuszú igényt lehet szerkeszteni.")
+    if not (user.is_admin or obj.requested_by_id == user.id):
+        raise HTTPException(403, "Csak a felvevő vagy admin szerkesztheti.")
+
+    if db.get(Category, category_id) is None:
+        return RedirectResponse(
+            url=f"/rendelo/{obj.id}/edit?error=Ismeretlen+kateg%C3%B3ria",
+            status_code=303,
+        )
+
+    obj.category_id = category_id
+    obj.note = (note or "").strip() or None
+
+    # Sorok teljes újraépítése (egyszerűbb mint diff-elni)
+    for line in list(obj.lines):
+        db.delete(line)
+    db.flush()
+
+    for idx, (raw_title, raw_qty, raw_unit) in enumerate(
+        zip(line_title, line_qty, line_unit, strict=False)
+    ):
+        title = (raw_title or "").strip()
+        if not title:
+            continue
+        qty = _parse_qty(raw_qty) or Decimal("1")
+        unit = (raw_unit or "db").strip() or "db"
+        raw_item_id = line_item_id[idx] if idx < len(line_item_id) else ""
+        item_id_val = int(raw_item_id.strip()) if raw_item_id.strip().isdigit() else None
+        db.add(
+            RequestLine(
+                request_id=obj.id,
+                line_no=idx + 1,
+                title=title,
+                qty=qty,
+                unit=unit,
+                item_id=item_id_val,
+            )
+        )
+
+    # Kép kezelése
+    if remove_image == "on":
+        obj.image_path = None
+    if image is not None and image.filename:
+        from app.modules.rendelo.uploads import save_uploaded_image
+
+        try:
+            obj.image_path = save_uploaded_image(image)
+        except ValueError as exc:
+            return RedirectResponse(
+                url=f"/rendelo/{obj.id}/edit?error=K%C3%A9p+hiba%3A+{exc}",
+                status_code=303,
+            )
+
+    db.add(
+        Event(
+            request_id=obj.id,
+            user_id=user.id,
+            action=EventAction.EDITED,
+            payload_json=json.dumps({"by": user.name}, ensure_ascii=False),
+        )
+    )
+    _audit(db, user.id, obj.id, "edit")
+    db.commit()
+    return RedirectResponse(url=f"/rendelo/{obj.id}", status_code=303)
 
 
 @router.post("/{request_id}/comment")

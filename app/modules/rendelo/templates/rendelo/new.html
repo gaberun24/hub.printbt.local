@@ -1,18 +1,27 @@
 {% extends "app.html" %}
 
 {% block topbar_action %}
-  <a href="/rendelo" class="btn">Mégsem</a>
+  <a href="{% if edit_request %}/rendelo/{{ edit_request.id }}{% else %}/rendelo{% endif %}" class="btn">Mégsem</a>
 {% endblock %}
 
 {% block main %}
-<h1 class="greeting" style="margin-bottom: 4px;">Új <em>igény</em></h1>
-<div class="greeting-date">Belső rendelés-kérés — kategória, tételek, megjegyzés</div>
+<h1 class="greeting" style="margin-bottom: 4px;">
+  {% if edit_request %}Igény <em>szerkesztése</em>{% else %}Új <em>igény</em>{% endif %}
+</h1>
+<div class="greeting-date">
+  {% if edit_request %}#{{ edit_request.id }} · csak `új` állapotban
+  {% else %}Belső rendelés-kérés — kategória, tételek, megjegyzés{% endif %}
+</div>
 
 {% if error %}
-  <div class="auth-error" role="alert" style="max-width: 720px; margin-top: 16px;">{{ error }}</div>
+  <div class="auth-error" role="alert" style="max-width: 760px; margin-top: 16px;">{{ error }}</div>
 {% endif %}
 
-<form method="post" action="/rendelo/new" style="max-width: 720px; margin-top: 24px;">
+<form method="post"
+      action="{% if edit_request %}/rendelo/{{ edit_request.id }}/edit{% else %}/rendelo/new{% endif %}"
+      enctype="multipart/form-data"
+      style="max-width: 760px; margin-top: 24px;">
+
   <div class="panel">
     <div class="panel-header">
       <div class="panel-title">Alapadatok</div>
@@ -22,18 +31,45 @@
         <label class="form-label" for="category_id">Kategória</label>
         <select class="form-input" name="category_id" id="category_id" required>
           {% for cat in categories %}
-            <option value="{{ cat.id }}">{{ cat.name }}</option>
+            <option value="{{ cat.id }}"
+              {% if edit_request and edit_request.category_id == cat.id %}selected{% endif %}>
+              {{ cat.name }}
+            </option>
           {% endfor %}
         </select>
       </div>
 
       <div class="form-group">
         <label class="form-label" for="note">Megjegyzés (opcionális)</label>
-        <textarea class="form-textarea" name="note" id="note"
-                  placeholder="Pl. 'sürgős, holnapra kell'"></textarea>
+        <textarea class="form-textarea" name="note" id="note" rows="3"
+                  placeholder="Pl. 'sürgős, holnapra kell'">{{ edit_request.note if edit_request and edit_request.note else '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="rendelo-image">Kép (opcionális)</label>
+        <input class="form-input" type="file" name="image" id="rendelo-image"
+               accept="image/jpeg,image/png,image/webp,image/heic,image/heif">
+        <div style="font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle); margin-top: 4px;">
+          Ctrl+V vágólapról vagy fájl-választás. Auto-rotate, max 1600px, JPEG.
+        </div>
+        <div id="rendelo-image-preview" class="hidden" style="margin-top: 10px;">
+          <img alt="" style="max-width: 240px; max-height: 180px; border-radius: 6px; border: 1px solid var(--border);">
+          <div class="preview-name" style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted); margin-top: 4px;"></div>
+        </div>
+        {% if edit_request and edit_request.image_path %}
+          <div style="margin-top: 10px;">
+            <img src="/uploads/{{ edit_request.image_path }}" alt="meglévő kép"
+                 style="max-width: 240px; max-height: 180px; border-radius: 6px; border: 1px solid var(--border);">
+            <label class="form-checkbox" style="margin-top: 6px;">
+              <input type="checkbox" name="remove_image"> Meglévő kép törlése
+            </label>
+          </div>
+        {% endif %}
       </div>
     </div>
   </div>
+
+  {# CASCADE_PLACEHOLDER — ide kerül a Malfini Póló cascade UI a háttér-portolásból #}
 
   <div class="panel">
     <div class="panel-header">
@@ -43,25 +79,61 @@
       </div>
     </div>
     <div class="panel-body">
-      <div class="task-builder">
-        {% for i in range(5) %}
-          <div class="task-builder-row">
-            <input name="line_unit" placeholder="db / l / csomag" value="db">
-            <input name="line_title" placeholder="Tétel megnevezése">
-            <input name="line_qty" class="qty" placeholder="1">
+      <div class="task-builder" id="lines-container">
+        {% set existing_lines = edit_request.lines if edit_request else [] %}
+        {% set row_count = [existing_lines|length, 5]|max %}
+        {% for i in range(row_count) %}
+          {% set line = existing_lines[i] if i < existing_lines|length else None %}
+          <div class="task-builder-row line-row" data-line-index="{{ i }}" style="position: relative;">
+            <input name="line_unit" placeholder="db / l / csomag" value="{{ line.unit if line else 'db' }}">
+            <input name="line_title" class="line-title" placeholder="Tétel megnevezése"
+                   autocomplete="off"
+                   value="{{ line.title if line else '' }}">
+            <input type="hidden" name="line_item_id" class="line-item-id"
+                   value="{{ line.item_id if line and line.item_id else '' }}">
+            <input name="line_qty" class="qty line-qty" placeholder="1"
+                   value="{{ line.qty if line else '' }}">
             <span style="color: var(--ink-subtle); font-family: var(--font-mono); font-size:10px; text-align:center;">#{{ i + 1 }}</span>
+            <div class="line-suggestions" style="position: absolute; z-index: 10; left: 0; right: 0; top: 100%;"></div>
+
+            {# Cascade dropdown — Póló kategóriához. Default rejtett, JS aktiválja
+               (rendelo_malfini_cascade.js, watch-eli a category_id select onchange-ét). #}
+            <div class="line-cascade hidden"
+                 style="grid-column: 1 / -1; padding: 10px 0 4px; border-top: 1px dashed var(--border); margin-top: 8px;">
+              <div style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-subtle); margin-bottom: 6px;">
+                Malfini cascade
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <select class="form-input cascade-model" style="flex: 2; min-width: 200px; height: 36px;">
+                  <option value="">— modell —</option>
+                </select>
+                <span class="cascade-color-swatch hidden"
+                      style="display: inline-block; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border); flex-shrink: 0;"></span>
+                <select class="form-input cascade-color" disabled style="flex: 2; min-width: 140px; height: 36px;">
+                  <option value="">— szín —</option>
+                </select>
+                <select class="form-input cascade-size" disabled style="flex: 1; min-width: 120px; height: 36px;">
+                  <option value="">— méret —</option>
+                </select>
+              </div>
+            </div>
           </div>
         {% endfor %}
       </div>
+
+      <style>
+        .line-cascade.hidden { display: none; }
+        .cascade-color-swatch.hidden { display: none !important; }
+      </style>
     </div>
   </div>
 
   <div class="action-bar">
     <button type="submit" class="btn btn-accent">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-      Igény mentése
+      {% if edit_request %}Mentés{% else %}Igény mentése{% endif %}
     </button>
-    <a href="/rendelo" class="btn btn-ghost">Mégsem</a>
+    <a href="{% if edit_request %}/rendelo/{{ edit_request.id }}{% else %}/rendelo{% endif %}" class="btn btn-ghost">Mégsem</a>
   </div>
 </form>
 {% endblock %}

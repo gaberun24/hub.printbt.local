@@ -5,7 +5,7 @@ URL-prefix `/admin/rendelo/...`, csak `is_admin` flag-gel hozzáférhető.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi import Request as FastAPIRequest
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
@@ -245,6 +245,55 @@ def items_edit_form(
             "categories": cats,
             "item": item,
             "error": error,
+            **sidebar_context(db, user, active_key="admin_rendelo_items"),
+        },
+    )
+
+
+# ───────────────────────── items: CSV bulk-import ─────────────────────────
+
+
+@router.post("/items/import-csv", response_class=HTMLResponse)
+async def items_import_csv(
+    request: FastAPIRequest,
+    csv_file: UploadFile = File(...),
+    dry_run: str | None = Form(None),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """Item katalógus CSV bulk-import. `dry_run=on` → nem ment, csak validál."""
+    from app.modules.rendelo.csv_import import import_csv
+
+    raw = await csv_file.read()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("latin-2")  # HU Excel default
+        except UnicodeDecodeError:
+            text = raw.decode("utf-8", errors="replace")
+
+    is_dry = dry_run == "on"
+    stats = import_csv(db, text, dry_run=is_dry)
+
+    cats = db.execute(select(Category).order_by(Category.sort_order, Category.name)).scalars().all()
+    items = db.execute(
+        select(Item).where(Item.active.is_(True)).order_by(Item.name)
+    ).scalars().all()
+    return templates.TemplateResponse(
+        request,
+        "rendelo_admin/items.html",
+        {
+            "user": user,
+            "title": "Tételek",
+            "topbar_title": "Tételek",
+            "topbar_subtitle": "Rendelő modul · katalógus",
+            "items": items,
+            "categories": cats,
+            "active_cat": None,
+            "show_inactive": False,
+            "csv_stats": stats,
+            "csv_dry_run": is_dry,
             **sidebar_context(db, user, active_key="admin_rendelo_items"),
         },
     )

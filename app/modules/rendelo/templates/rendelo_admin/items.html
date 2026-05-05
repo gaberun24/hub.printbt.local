@@ -11,6 +11,61 @@
 <h1 class="greeting" style="margin-bottom: 4px;">Tételek</h1>
 <div class="greeting-date">Rendelő modul · katalógus</div>
 
+{# CSV bulk-import — összecsukható panel a tetején #}
+<details class="panel" style="margin-top: 20px;" {% if csv_stats %}open{% endif %}>
+  <summary style="padding: 14px 18px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 10px;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    CSV bulk-import
+    <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--ink-subtle); margin-left: auto;">
+      name, category (kötelező) · brand, code, sizes, description, supplier, default_unit (opcionális)
+    </span>
+  </summary>
+  <div style="padding: 0 18px 18px;">
+    <form method="post" action="/admin/rendelo/items/import-csv" enctype="multipart/form-data">
+      <div style="display: flex; gap: 10px; align-items: end; flex-wrap: wrap;">
+        <div class="form-group" style="flex: 1; min-width: 240px; margin-bottom: 0;">
+          <label class="form-label">CSV fájl</label>
+          <input class="form-input" type="file" name="csv_file" accept=".csv,text/csv" required>
+        </div>
+        <label class="form-checkbox" style="margin-bottom: 6px;">
+          <input type="checkbox" name="dry_run" {% if csv_stats and csv_dry_run %}checked{% endif %}>
+          Dry-run (validálás, ne mentsen)
+        </label>
+        <button type="submit" class="btn btn-accent" style="height: 38px;">Import</button>
+      </div>
+      <div style="margin-top: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-subtle);">
+        Header sor kötelező. Vessző VAGY pontosvessző elválasztás (auto-detekt). UTF-8 vagy Latin-2 kódolás.
+      </div>
+    </form>
+
+    {% if csv_stats %}
+      <div style="margin-top: 14px; padding: 12px; background: var(--surface-2); border-radius: 6px;">
+        <div style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: {% if csv_stats.errors %}var(--accent){% else %}var(--success-ink){% endif %}; margin-bottom: 6px;">
+          {% if csv_dry_run %}Dry-run eredmény{% else %}Import befejezve{% endif %}
+        </div>
+        <div style="font-family: var(--font-mono); font-size: 12px;">
+          {{ csv_stats.rows_seen }} sor · {{ csv_stats.added }} új · {{ csv_stats.updated }} frissítve · {{ csv_stats.skipped }} kihagyva
+        </div>
+        {% if csv_stats.errors %}
+          <details style="margin-top: 8px;">
+            <summary style="font-family: var(--font-mono); font-size: 11px; color: var(--accent); cursor: pointer;">
+              {{ csv_stats.errors|length }} hiba — kibontás
+            </summary>
+            <ul style="margin: 8px 0 0 16px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted);">
+              {% for err in csv_stats.errors[:30] %}
+                <li>{{ err }}</li>
+              {% endfor %}
+              {% if csv_stats.errors|length > 30 %}
+                <li style="color: var(--ink-subtle);">... és további {{ csv_stats.errors|length - 30 }} hiba</li>
+              {% endif %}
+            </ul>
+          </details>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</details>
+
 <div class="stock-toolbar" style="margin-top: 24px;">
   <a href="/admin/rendelo/items{% if show_inactive %}?show_inactive=true{% endif %}"
      class="filter-chip {% if not active_cat %}active{% endif %}">

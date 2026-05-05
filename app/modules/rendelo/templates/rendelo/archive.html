@@ -1,0 +1,93 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/rendelo" class="btn">Aktív igények</a>
+  <button type="button" class="btn archive-print-btn">🖨 Nyomtatás</button>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Archívum <em>lezárt igények</em></h1>
+<div class="greeting-date">
+  {{ items|length }} igény ·
+  {% if from_date or to_date %}
+    {{ from_date or '…' }} → {{ to_date or 'most' }}
+  {% else %}
+    utolsó 2 év (default ablak)
+  {% endif %}
+</div>
+
+<form method="get" action="/rendelo/archive" class="panel" style="margin-top: 20px; padding: 16px;">
+  <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: end;">
+    <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom: 0;">
+      <label class="form-label">Tól</label>
+      <input class="form-input" type="date" name="from_date" id="af-from" value="{{ from_date }}">
+    </div>
+    <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom: 0;">
+      <label class="form-label">Ig</label>
+      <input class="form-input" type="date" name="to_date" id="af-to" value="{{ to_date }}">
+    </div>
+    <div class="form-group" style="flex: 1; min-width: 160px; margin-bottom: 0;">
+      <label class="form-label">Kategória</label>
+      <select class="form-input" name="category">
+        <option value="">— összes —</option>
+        {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if active_category == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="flex: 2; min-width: 200px; margin-bottom: 0;">
+      <label class="form-label">Keresés</label>
+      <input class="form-input" name="q" value="{{ q }}" placeholder="Megjegyzés / beszállító / ref">
+    </div>
+    <button type="submit" class="btn btn-accent" style="height: 38px;">Szűrés</button>
+  </div>
+
+  <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px;">
+    <button type="button" class="btn btn-sm quick-date-chip" data-quick-date="this-month">Ez a hónap</button>
+    <button type="button" class="btn btn-sm quick-date-chip" data-quick-date="last-month">Múlt hónap</button>
+    <button type="button" class="btn btn-sm quick-date-chip" data-quick-date="last-30">Utolsó 30 nap</button>
+    <button type="button" class="btn btn-sm quick-date-chip" data-quick-date="this-year">Ez az év</button>
+    <button type="button" class="btn btn-sm quick-date-chip" data-quick-date="last-year">Múlt év</button>
+  </div>
+</form>
+
+{% if not items %}
+  <div class="panel" style="margin-top: 20px; padding: 32px; text-align: center;">
+    <div style="font-family: var(--font-display); font-size: 18px; font-style: italic; color: var(--ink-muted);">
+      Nincs találat a megadott szűrőkkel.
+    </div>
+  </div>
+{% else %}
+  {% for month, month_items in by_month.items() %}
+    <div style="margin-top: 24px;">
+      <h2 style="font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: -0.01em; padding-bottom: 6px; border-bottom: 1px solid var(--border);">
+        {{ month }}
+        <span class="archive-month-count" data-month="{{ month }}" style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle); font-weight: 500;"></span>
+      </h2>
+      <div class="req-list" data-archive-month="{{ month }}" style="margin-top: 8px;">
+        {% for r in month_items %}
+          {% include "rendelo/_request_row.html" %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<style>
+  /* Print-mód: a body-on .print-archive class lesz amikor a "Nyomtatás" gombra kattintunk */
+  @media print {
+    body.print-archive .sidebar,
+    body.print-archive .topbar,
+    body.print-archive .archive-print-btn,
+    body.print-archive form.panel {
+      display: none !important;
+    }
+    body.print-archive .main { padding: 0; }
+    body.print-archive .req-list { page-break-inside: avoid; }
+  }
+  .flash-bg {
+    background-color: rgba(255, 200, 100, 0.4) !important;
+    transition: background-color 0.6s ease;
+  }
+</style>
+{% endblock %}
