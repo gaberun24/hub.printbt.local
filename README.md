@@ -10,12 +10,8 @@
 
 - 📋 [`ROADMAP.md`](ROADMAP.md) — fázisok és státusz
 - 📝 [`CHANGELOG.md`](CHANGELOG.md) — release notes
-- 🏗 [`docs/architecture.md`](docs/architecture.md) — kódbázis és deploy felépítése
-- 🛠 [`docs/runbook.md`](docs/runbook.md) — üzemeltetési teendők (logok, restart, backup)
-- 🎯 [`docs/decisions.md`](docs/decisions.md) — döntéslog (mit miért választottunk)
-- ❓ [`docs/open-questions.md`](docs/open-questions.md) — még nyitott kérdések
-- 🤖 [`CLAUDE.md`](CLAUDE.md) — Claude Code session-ök kontextusa
-- 📜 Részletes UI mockup: `docs/mockup.html`
+- 🚀 [`DEPLOY.md`](DEPLOY.md) — telepítési doku (Ubuntu 24.04, gh + setup-app.sh)
+- 📜 Részletes UI mockup: `docs/hub_mockup.html` és `docs/muhely_mockup.html`
 
 ---
 
@@ -57,18 +53,21 @@ A rendszer kizárólag a céges hálón érhető el, nincs publikus URL, nincs C
 
 ```
 Backend       FastAPI + Uvicorn (Python 3.12)
-DB            SQLite (WAL módban) — egy fájl, három modul közös
+DB            SQLite (WAL módban, busy_timeout=30s) — egy fájl, három modul közös
 Frontend      Jinja2 + htmx (CDN, nincs build pipeline)
-Auth          session cookie + argon2id, meghívásos regisztráció
-Email         imap_tools (IMAP poller, asyncio)
-AI            Google Gemini API (gemini-2.5-flash)
-Vírusszűrő    ClamAV (clamd daemon + pyclamd) — email csatolmányok
-PDF           WeasyPrint (HTML+CSS → A4)
-Worker        külön systemd service (IMAP poll + Corel preview watcher)
-Notifikáció   in-page toast + Web Audio ding (htmx polling vagy SSE)
-Deploy        Proxmox LXC (Debian 12), systemd, nginx
+Auth          session cookie + argon2id, meghívásos regisztráció, multi-role flag
+Email         imap_tools (IMAP poller, async loop), per-account SMTP, ClamAV instream
+AI            provider switch admin UI-ról: Ollama (helyi) / Gemini Flash / LM Studio
+              — runtime config a system_settings táblában, titkosított kulcsokkal
+Vírusszűrő    ClamAV (clamd daemon + pyclamd, instream — AppArmor-kompatibilis)
+PDF           WeasyPrint (HTML+CSS → A4), Pillow képfeltöltéshez
+Worker        hub-worker.service: IMAP poll (60s) + email purge (7d) +
+              IMAP cleanup (3d) + Malfini stock-szinkron (hétköznap 7-18, fél óránként)
+Notifikáció   in-page toast + Web Audio ding (htmx polling, sidebar count auto-refresh)
+Deploy        Ubuntu 24.04 LTS LXC (VMware vagy Proxmox), systemd, nginx
 TLS           self-signed (mkcert local CA), vagy plain HTTP a belső hálón
 Backup        Synology DS124+ (RAID1 SHR) + off-site Hetzner Storage Box (restic)
+              — backup script + systemd timer még nincs (Roadmap)
 ```
 
 A Rendelő stackjét örököljük, kibővítve azzal ami a Munkák és Készlet moduloknak kell. Ugyanaz az ops workflow.
@@ -667,101 +666,21 @@ A grafikus storage szervert lokál fejlesztésnél nem mountoljuk — a `COREL_P
 
 ## Roadmap
 
-Részletek: [`ROADMAP.md`](ROADMAP.md). Aktuális állás: **Fázis 1.2b kész** (Rendelő modul CRUD + admin nézetek). Következő: Fázis 1.3 (`hub import-rendelo`) vagy Fázis 2 (Munkák modul csontváz).
+Részletes fázis-by-fázis tracker: [`ROADMAP.md`](ROADMAP.md).
+Release notes: [`CHANGELOG.md`](CHANGELOG.md).
 
-### Fázis 0 — Auth refaktor és skeleton
+**Aktuális állás (2026-05-05):** v0.5.0 — **Fázis 0, 1, 2, 4 kész**, **Fázis 3** A4-PDF-fel részben kész (Corel makró még nincs). A Hub production-on fut a `192.168.1.69` LXC-n, és a régi `nyomda_rendelo` repó **összes** funkcióját átvette (Malfini B2B, CSV-importer, archívum, cascade dropdown, live notification).
 
-- [x] Rendelő auth-jának kiemelése `shared_auth` package-ba
-- [x] Új közös app skeleton FastAPI + htmx-szel, modul-routing struktúrával
-- [x] Közös DB séma: `users`, `customers`, `audit_log`, `notifications`
-- [x] Multi-role flag rendszer + sidebar dinamika (7 flag, beleértve `is_superadmin`)
-- [x] Login / logout / meghívásos regisztráció / CLI parancsok
-- [ ] LXC bootstrap script + setup script
-- [x] Healthcheck endpoint, alap logging
-
-### Fázis 1 — Rendelő modul migráció
-
-- [x] Rendelő táblák átemelve a közös DB-be (séma `rendelo_*` prefixszel)
-- [x] Rendelő route-ok átemelve `app/modules/rendelo/` alá
-- [x] Rendelő templates átdolgozva a közös sidebar-ra (mockup-faithful)
-- [x] CRUD: új igény form, részletek, állapot-átléptetés, kommentek
-- [x] Admin nézetek: kategóriák, tételek, userek, meghívók
-- [ ] Régi Rendelő DB-ből adatmigráció (`hub import-rendelo`)
-- [ ] DNS átirányítás, régi service kikapcs
-- [ ] Production cutover
-
-### Fázis 2 — Munkák modul: csontváz
-
-- [ ] `customers`, `jobs`, `job_tasks`, `job_attachments` táblák + migrációk
-- [ ] CRUD: ügyfél, Job, JobTask
-- [ ] Public ID generátor (collision retry-jal, formattal)
-- [ ] Státusz-átléptetés UI + audit log
-- [ ] „Új munka" form (felvevő nézet)
-- [ ] „Saját munkáim" / „Közös pool" / „Műhely" nézetek
-- [ ] Műhelyes szűrők (gép-típus, státusz, határidő)
-- [ ] Toast notifikáció + Web Audio ding (htmx polling)
-
-### Fázis 3 — A4 munkalap és Corel makró
-
-- [ ] WeasyPrint + Jinja2 sablon az A4-hez
-- [ ] PDF preview a Job-nézetben + nyomtatás gomb
-- [ ] CorelDRAW VBA makró (3 gépre telepítve)
-- [ ] File watcher worker (`watchdog` lib) a preview-k beemelésére
-- [ ] Multi-page Corel handling (több preview → több A4 lap)
-- [ ] Drag-drop fallback PNG feltöltéshez
-
-### Fázis 4 — Email integráció
-
-- [ ] `email_accounts` konfig + **superadmin** UI (`/system/email-accounts`,
-  titkosított `imap_password_encrypted` a `SECRET_KEY`-vel)
-- [ ] IMAP poller worker (`imap_tools`, asyncio, 4 fiók párhuzamos)
-- [ ] Csatolmány-mentés storage-ra
-- [ ] Gemini előszűrés (`gemini-2.5-flash`) + `incoming_emails` mentés
-- [ ] 4-tab inbox UI (Munka / Árajánlat / Egyéb / Spam)
-- [ ] „Munkává alakítás" prefilled form
-- [ ] Manuális kategória-felülbírálás (audit-ba mentve)
-- [ ] Spam auto-purge cron (7 nap)
-
-### Fázis 5 — Árajánlat shared inbox
-
-- [ ] Shared inbox lock mechanika (locked_by + 5 perc auto-unlock)
-- [ ] Élő avatar-jelzés (SSE vagy polling)
-- [ ] AI válasz draft gomb (Gemini)
-- [ ] Válasz küldés SMTP-vel
-
-### Fázis 6 — Készlet modul
-
-- [ ] `stock_items`, `stock_movements`, `job_material_requirements` táblák
-- [ ] Item CRUD admin nézet
-- [ ] Job-on anyagigény-szerkesztő
-- [ ] Hiány-jelző + „Rendelés generál" gomb (Rendelő modulba auto-igény)
-- [ ] Befejezéskor automatikus készlet-csökkentés
-- [ ] Min-stock alá esés notifikáció
-- [ ] Leltár nézet (havi)
-- [ ] Bevételezés (kézi vagy Rendelő-igény-lezárásból)
-
-### Fázis 7 — Csiszolás
-
-- [ ] Keresés régi munkákban (ID, ügyfél, dátumtartomány, státusz)
-- [ ] Visszahívandó ügyfelek lista (kész >X napja, nincs átadva)
-- [ ] Statisztika dashboard (admin): havi munkaszám, csatorna-eloszlás, átlagos átfutás, készlet-fogyási trendek
-- [ ] Discord/JARVIS notifikáció integráció (sürgős munka, ki nem vett pool-elem, készlet kritikus)
-- [ ] PWA telepítés a műhelyes tabletekre (offline-cache nélkül, csak ikon)
-- [ ] Gemini-alapú „heti összefoglaló" jelentés admin-nak
-
-### Rendszer-szintű (superadmin) UI — folyamatos
-
-A `is_superadmin` flag-gel elérhető `/system/...` route-ok. Bizalmas
-adatok (credentials, mount-konfig) → kizárólag a Hub gazdája fér hozzá.
-
-- [ ] `/system/email-accounts` — IMAP fiókok CRUD (Fázis 4-gyel együtt)
-- [ ] `/system/api-keys` — Gemini és SMTP credek runtime UI-ról
-  szerkeszthetők (DB-ben titkosítva, a `.env`-et override-olja)
-- [ ] `/system/storage` — SMB mount config + status. A tényleges mount
-  művelet host-szinten (LXC `/etc/pve/lxc/110.conf` `mp0` vagy systemd
-  mount unit), a UI csak a credentials-t tárolja és status-t mutat.
-- [ ] `/system/audit-log` — globális audit log böngésző (entity_type
-  szűrővel, dátumtartomány)
+| Fázis | Cél | Státusz |
+|-------|-----|---------|
+| 0 | Auth + skeleton | ✅ kész |
+| 1 | Rendelő modul (full port) | ✅ kész |
+| 2 | Munkák modul | ✅ kész |
+| 3 | A4 munkalap + Corel makró | ⏳ A4-PDF kész, Corel makró nem |
+| 4 | Email integráció (IMAP + AI klasszifikáció) | ✅ kész |
+| 5 | Árajánlat shared inbox | tervezett |
+| 6 | Készlet modul (belső raktár) | tervezett |
+| 7 | Csiszolás (statisztika, keresés, PWA) | tervezett |
 
 ### Lehetséges későbbi modulok
 
