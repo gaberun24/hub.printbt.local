@@ -50,14 +50,36 @@
   </div>
 </div>
 
-<div class="section-header">
-  <div class="section-title">Aktív igények</div>
-  <div class="section-count">{{ active_requests|length }} · rendezés: legújabb</div>
-  <div class="section-action">
-    {% if active_category %}
-      <a href="/rendelo" class="btn" style="font-size: 12px;">Mind kategória</a>
+{# Kategória-szűrő chip-sáv. Minden chip-en a nyitott (NEW + ORDERED) szám.
+   Ha van legalább 1 NEW az adott kategóriában, a bogyó pulzál (orderer-figyelem). #}
+<div class="cat-chip-bar" style="margin-top: 20px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+  <a href="/rendelo{% if view %}?view={{ view }}{% endif %}"
+     class="cat-chip {% if not active_category %}active{% endif %}">
+    <span>Mind</span>
+    {% if all_total > 0 %}
+      <span class="cat-chip-count {% if all_new > 0 %}pulse{% endif %}">{{ all_total }}</span>
     {% endif %}
+  </a>
+  {% for cat in categories %}
+    {% set bucket = cat_counts.get(cat.id, {"total": 0, "new": 0}) %}
+    <a href="/rendelo?category={{ cat.id }}{% if view %}&view={{ view }}{% endif %}"
+       class="cat-chip {% if active_category and active_category.id == cat.id %}active{% endif %}"
+       style="--cat-color: {{ cat.color }};">
+      <span class="cat-dot" aria-hidden="true"></span>
+      <span>{{ cat.name }}</span>
+      {% if bucket.total > 0 %}
+        <span class="cat-chip-count {% if bucket.new > 0 %}pulse{% endif %}">{{ bucket.total }}</span>
+      {% endif %}
+    </a>
+  {% endfor %}
+</div>
+
+<div class="section-header" style="margin-top: 14px;">
+  <div class="section-title">
+    {% if active_category %}{{ active_category.name }} igények{% else %}Aktív igények{% endif %}
   </div>
+  <div class="section-count">{{ active_requests|length }} · rendezés: legújabb</div>
+  <div class="section-action"></div>
 </div>
 
 {% if active_requests %}

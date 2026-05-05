@@ -182,6 +182,25 @@ def rendelo_list(
     if category is not None:
         active_category = db.get(Category, category)
 
+    # Kategóriánkénti bontás a chip-sávhoz: { category_id: {"new": N, "ordered": M, "total": N+M} }
+    cat_rows = db.execute(
+        select(Request.category_id, Request.status, func.count())
+        .where(Request.status.in_([RequestStatus.NEW, RequestStatus.ORDERED]))
+        .group_by(Request.category_id, Request.status)
+    ).all()
+    cat_counts: dict[int, dict[str, int]] = {}
+    for cat_id, status_val, n in cat_rows:
+        bucket = cat_counts.setdefault(cat_id, {"new": 0, "ordered": 0, "total": 0})
+        if str(status_val) == "new":
+            bucket["new"] = n
+        else:
+            bucket["ordered"] = n
+        bucket["total"] = bucket["new"] + bucket["ordered"]
+    all_total = sum(b["total"] for b in cat_counts.values())
+    all_new = sum(b["new"] for b in cat_counts.values())
+
+    categories = _categories(db)
+
     return templates.TemplateResponse(
         request,
         "rendelo/list.html",
@@ -195,6 +214,10 @@ def rendelo_list(
             "active_requests": active_requests,
             "arrived_requests": arrived_requests,
             "summary": _summary(db, user),
+            "categories": categories,
+            "cat_counts": cat_counts,
+            "all_total": all_total,
+            "all_new": all_new,
             **sidebar_context(db, user, active_key="rendelo_list"),
         },
     )

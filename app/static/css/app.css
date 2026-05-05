@@ -2475,6 +2475,67 @@ select.compose-input {
 ::-webkit-scrollbar-thumb:hover { background: var(--ink-subtle); }
 
 
+/* ─────────────────────── Kategória chip-sáv (Rendelő list) ──────────
+   A `/rendelo` oldal aktív igények fölött lévő szűrő-sáv. Minden chip
+   kategória-color-os pötty + label + opcionális szám-bogyó. A bogyó
+   pulzál, ha van NEW állapotú igény (orderer-figyelem). */
+.cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color 0.15s, background-color 0.15s;
+  white-space: nowrap;
+}
+.cat-chip:hover { border-color: var(--border-strong); }
+.cat-chip.active {
+  background: var(--surface-2);
+  border-color: var(--ink-muted);
+  font-weight: 600;
+}
+.cat-chip .cat-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--cat-color, var(--ink-subtle));
+  flex-shrink: 0;
+}
+.cat-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  background: var(--surface-3);
+  border-radius: 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+.cat-chip-count.pulse {
+  background: var(--accent);
+  color: #FFF;
+  animation: cat-chip-pulse 1.6s ease-in-out infinite;
+}
+@keyframes cat-chip-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--accent-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+
+
 /* ─────────────────────── Print mód ───────────────────────────────────
    A Rendelő igény-detail nyomtatáskor: chrome (sidebar, topbar, gombok,
    composer, jobb oldali timeline-panel) elrejtve, a tartalom full-width
@@ -2493,6 +2554,7 @@ select.compose-input {
   #toast-container,
   .action-bar,
   .composer,
+  .cat-chip-bar,
   .btn,
   .btn-accent,
   .btn-ghost,
