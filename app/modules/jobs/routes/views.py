@@ -68,6 +68,83 @@ _ACTIVE_STATUSES = (
 )
 
 
+def _attach_email_to_job(db: Session, user: User, job: Job, email_id: int) -> int:
+    """Email csatolmányainak másolása a Job-hoz mint JobAttachment(kind=customer).
+
+    A fájlokat fizikailag is átmásolja az `uploads/inbox/...` alól az
+    `uploads/munkak/{public_id}/` alá — az inbox-on maradnak az eredetik is.
+    Az IncomingEmail.converted_to_job_id és processed_at is beállítódik.
+
+    Returns: a Job-hoz csatolt fájlok száma.
+    """
+    import shutil
+    from pathlib import Path
+
+    from app.modules.jobs.email_models import EmailAttachment, IncomingEmail, ScanStatus
+
+    incoming = db.get(IncomingEmail, email_id)
+    if incoming is None:
+        return 0
+
+    # A converted_to_job_id-t és processed_at-et akkor is állítjuk, ha nincs csatolmány
+    incoming.converted_to_job_id = job.id
+    incoming.processed_at = utcnow()
+
+    atts = (
+        db.execute(
+            select(EmailAttachment).where(EmailAttachment.email_id == email_id)
+        )
+        .scalars()
+        .all()
+    )
+
+    if not atts:
+        return 0
+
+    upload_dir = Path(settings.upload_dir)
+    dest_dir = upload_dir / "munkak" / job.public_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    copied = 0
+    for att in atts:
+        # Fertőzött csatolmányt ne másoljunk a Job-mappába
+        if att.scan_status == ScanStatus.INFECTED:
+            continue
+
+        src = upload_dir / att.storage_path
+        if not src.exists():
+            continue
+
+        # Ütközés esetén sorszám
+        safe_name = att.filename or "unnamed"
+        dest = dest_dir / safe_name
+        counter = 1
+        while dest.exists():
+            stem, suffix = dest.stem, dest.suffix
+            dest = dest_dir / f"{stem}_{counter}{suffix}"
+            counter += 1
+
+        try:
+            shutil.copy2(src, dest)
+        except OSError:
+            continue
+
+        db.add(
+            JobAttachment(
+                job_id=job.id,
+                kind=AttachmentKind.CUSTOMER,
+                filename=att.filename,
+                file_path=str(dest.relative_to(upload_dir)),
+                size_bytes=att.size_bytes,
+                content_type=att.content_type,
+                uploaded_by_id=user.id,
+            )
+        )
+        copied += 1
+
+    return copied
+
+
 def _group_by_status(jobs: list[Job]) -> dict[str, list[Job]]:
     """A dashboard-szerű szekciókhoz csoportosítja a Job-okat státusz szerint.
     A sorrend megegyezik a state-machine sorrendjével."""
@@ -177,12 +254,64 @@ def jobs_new_form(
     db: Session = Depends(get_db),
     error: str | None = Query(None),
     customer_id: int | None = Query(None, description="prefill from /customers/.../új munka"),
+    from_email: int | None = Query(None, description="IncomingEmail ID — Munkává alakítás"),
 ) -> HTMLResponse:
     if not (user.is_admin or user.is_intake or user.is_designer):
         raise HTTPException(403, "Új munka felvételéhez intake vagy designer jog kell.")
 
     customers = db.execute(select(Customer).order_by(Customer.name)).scalars().all()
     prefill_customer = db.get(Customer, customer_id) if customer_id else None
+
+    # ── Email-ből generált új munka prefill-je ──
+    source_email = None
+    prefill_description = None
+    prefill_intake_channel = "personal"
+    customer_hint_email = None  # ha nincs match: link az új ügyfélhez
+    customer_hint_name = None
+
+    if from_email:
+        from app.modules.jobs.email_models import IncomingEmail
+
+        source_email = db.execute(
+            select(IncomingEmail)
+            .options(selectinload(IncomingEmail.attachments))
+            .where(IncomingEmail.id == from_email)
+        ).scalar_one_or_none()
+
+        if source_email is not None:
+            # Description: tárgy + body első része
+            body_excerpt = (source_email.body_text or "")[:1500].strip()
+            parts = []
+            if source_email.subject:
+                parts.append(f"Tárgy: {source_email.subject}")
+            if source_email.gemini_summary:
+                parts.append(f"AI összefoglaló: {source_email.gemini_summary}")
+            if body_excerpt:
+                parts.append("")
+                parts.append(body_excerpt)
+            prefill_description = "\n".join(parts) if parts else None
+
+            prefill_intake_channel = "email"
+
+            # Customer match: matched_customer_id, vagy email-cím alapján case-insensitive
+            if not prefill_customer:
+                if source_email.matched_customer_id:
+                    prefill_customer = db.get(Customer, source_email.matched_customer_id)
+                else:
+                    addr = (source_email.from_address or "").strip().lower()
+                    if addr:
+                        prefill_customer = db.execute(
+                            select(Customer).where(func.lower(Customer.email) == addr)
+                        ).scalar_one_or_none()
+
+            # Ha nincs match, a UI-on egy gomb-ot mutatunk az új ügyfél létrehozására
+            if not prefill_customer:
+                customer_hint_email = source_email.from_address
+                # Név-prefill: a from_name (ha van) vagy az email local-part
+                if source_email.from_name:
+                    customer_hint_name = source_email.from_name
+                else:
+                    customer_hint_name = (source_email.from_address or "").split("@")[0]
 
     return templates.TemplateResponse(
         request,
@@ -194,6 +323,11 @@ def jobs_new_form(
             "topbar_subtitle": "felvétel: ügyfél, határidő, taskok",
             "customers": customers,
             "prefill_customer": prefill_customer,
+            "source_email": source_email,
+            "prefill_description": prefill_description,
+            "prefill_intake_channel": prefill_intake_channel,
+            "customer_hint_email": customer_hint_email,
+            "customer_hint_name": customer_hint_name,
             "error": error,
             "job_types": list(JobType),
             "task_types": list(TaskType),
@@ -228,6 +362,7 @@ def jobs_new_submit(
     source_file_path: str | None = Form(None),
     price_huf: int | None = Form(None),
     pool: str | None = Form(None),
+    from_email: int | None = Form(None),
     task_type: list[str] = Form(default_factory=list),
     task_quantity: list[str] = Form(default_factory=list),
     task_instructions: list[str] = Form(default_factory=list),
@@ -283,12 +418,22 @@ def jobs_new_submit(
     # kikapcsolt = magamhoz veszem (designer-jog kell hozzá)
     assigned_designer_id = None if pool == "on" or not user.is_designer else user.id
 
+    # from_email validáció: a job mezőjébe csak létező IncomingEmail ID-t teszünk
+    valid_from_email_id: int | None = None
+    if from_email:
+        from app.modules.jobs.email_models import IncomingEmail
+
+        if db.get(IncomingEmail, from_email) is not None:
+            valid_from_email_id = from_email
+        # ha nem létezik, csendben elejtjük — nem akadályozzuk a Job létrehozását
+
     job = Job(
         public_id=generate_unique(db),
         customer_id=customer.id,
         job_type=jt,
         intake_user_id=user.id,
         intake_channel=ic,
+        source_email_id=valid_from_email_id,
         assigned_designer_id=assigned_designer_id,
         deadline=parsed_deadline,
         is_urgent=(is_urgent == "on"),
@@ -299,6 +444,10 @@ def jobs_new_submit(
     )
     db.add(job)
     db.flush()
+
+    # Email-ből jön a Job? Csatolmányok másolása + IncomingEmail update
+    if valid_from_email_id:
+        _attach_email_to_job(db, user, job, valid_from_email_id)
 
     for tt, qty, instr in cleaned_tasks:
         db.add(

@@ -14,12 +14,56 @@
 
 <form method="post" action="/jobs/new" style="max-width: 720px; margin-top: 24px;">
 
+  {% if source_email %}
+    <input type="hidden" name="from_email" value="{{ source_email.id }}">
+    <div class="panel" style="border-left: 3px solid var(--info);">
+      <div class="panel-header">
+        <div class="panel-title">📧 Email-ből</div>
+        <a href="/jobs/inbox/{{ source_email.id }}" style="font-size: 11px; color: var(--ink-subtle);">vissza az emailhez</a>
+      </div>
+      <div class="panel-body">
+        <div style="font-family: var(--font-mono); font-size: 12px; line-height: 1.7;">
+          <span style="color: var(--ink-muted);">Feladó:</span>
+          <strong>{{ source_email.from_name or '' }}</strong> &lt;{{ source_email.from_address }}&gt;<br>
+          <span style="color: var(--ink-muted);">Tárgy:</span>
+          {{ source_email.subject or '(nincs tárgy)' }}<br>
+          <span style="color: var(--ink-muted);">Érkezett:</span>
+          {{ source_email.received_at | hu_date('time') }}
+          {% if source_email.attachments %}
+            <br><span style="color: var(--ink-muted);">Csatolmány:</span>
+            {{ source_email.attachments|length }} fájl — automatikusan a munkához csatolva mentés után
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {# A next= URL-encode-olása fontos: különben a böngésző a `?from_email=`
+     query stringet a /customers/new fő URL-jébe tördelné, és a customer
+     mentés utáni redirectből elveszne a from_email. #}
+  {% set _next_path = "/jobs/new?from_email=" ~ source_email.id if source_email else "/jobs/new" %}
+  {% set new_customer_url -%}
+    /customers/new?next={{ _next_path|urlencode }}
+    {%- if customer_hint_email %}&email={{ customer_hint_email|urlencode }}{% endif %}
+    {%- if customer_hint_name %}&name={{ customer_hint_name|urlencode }}{% endif %}
+  {%- endset %}
+
   <div class="panel">
     <div class="panel-header">
       <div class="panel-title">Ügyfél</div>
-      <a href="/customers/new?next=/jobs/new" style="font-size: 12px; color: var(--accent); font-weight: 500;">+ Új ügyfél</a>
+      <a href="{{ new_customer_url }}" style="font-size: 12px; color: var(--accent); font-weight: 500;">+ Új ügyfél</a>
     </div>
     <div class="panel-body">
+      {% if customer_hint_email and not prefill_customer %}
+        <div style="margin-bottom: 12px; padding: 10px 12px; background: var(--surface-2); border-radius: 6px; font-size: 12px;">
+          <div style="font-family: var(--font-mono); color: var(--ink-muted); margin-bottom: 4px;">
+            Ez a feladó ({{ customer_hint_email }}) nincs az ügyfél-törzsben.
+          </div>
+          <a href="{{ new_customer_url }}" class="btn btn-sm btn-accent" style="margin-top: 4px;">
+            + Új ügyfél: {{ customer_hint_name }}
+          </a>
+        </div>
+      {% endif %}
       <div class="form-group" style="margin-bottom: 0;">
         <label class="form-label">Válassz ügyfelet</label>
         <select class="form-input" name="customer_id" required>
@@ -50,9 +94,10 @@
         </div>
         <div class="form-group">
           <label class="form-label">Csatorna</label>
+          {% set _ic_default = prefill_intake_channel or 'personal' %}
           <select class="form-input" name="intake_channel">
             {% for ic in intake_channels %}
-              <option value="{{ ic.value }}" {% if ic.value == 'personal' %}selected{% endif %}>
+              <option value="{{ ic.value }}" {% if ic.value == _ic_default %}selected{% endif %}>
                 {% if ic.value == 'personal' %}Személyes
                 {% elif ic.value == 'email' %}Email
                 {% elif ic.value == 'workshop_dropoff' %}Műhelyben behozta
@@ -92,8 +137,8 @@
 
       <div class="form-group">
         <label class="form-label">Leírás</label>
-        <textarea class="form-textarea" name="description"
-                  placeholder="Pl. '50 db Gildan Heavy Cotton, fekete S/M/L vegyesen, mell-méret 28×20 cm, középre. DTF nyomás, vasalás 200°C 15s.'"></textarea>
+        <textarea class="form-textarea" name="description" rows="6"
+                  placeholder="Pl. '50 db Gildan Heavy Cotton, fekete S/M/L vegyesen, mell-méret 28×20 cm, középre. DTF nyomás, vasalás 200°C 15s.'">{{ prefill_description or '' }}</textarea>
       </div>
 
       <div class="form-group">

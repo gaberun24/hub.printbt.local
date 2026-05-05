@@ -75,6 +75,8 @@ def customers_new_form(
     db: Session = Depends(get_db),
     error: str | None = Query(None),
     next: str | None = Query(None, description="redirect target after save"),
+    email: str | None = Query(None, description="prefill (pl. inbox-ból)"),
+    name: str | None = Query(None, description="prefill (pl. inbox-ból)"),
 ) -> HTMLResponse:
     _require_customer_access(user)
     return templates.TemplateResponse(
@@ -87,6 +89,8 @@ def customers_new_form(
             "customer": None,
             "error": error,
             "next_url": next,
+            "prefill_email": (email or "").strip().lower(),
+            "prefill_name": (name or "").strip(),
             **sidebar_context(db, user, active_key="data_customers"),
         },
     )
