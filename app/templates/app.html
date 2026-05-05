@@ -40,4 +40,12 @@
 </div>
 
 <div id="toast-container" aria-live="polite"></div>
+
+{# Rendelő modul JS-ei. Mindegyik no-op ha a megfelelő DOM-element nincs az oldalon. #}
+<script src="{{ url_for('static', path='js/rendelo_notify.js') }}" defer></script>
+<script src="{{ url_for('static', path='js/rendelo_image_paste.js') }}" defer></script>
+<script src="{{ url_for('static', path='js/rendelo_archive.js') }}" defer></script>
+<script src="{{ url_for('static', path='js/rendelo_autocomplete.js') }}" defer></script>
+<script src="{{ url_for('static', path='js/rendelo_malfini_cascade.js') }}" defer></script>
+<script src="{{ url_for('static', path='js/clipboard.js') }}" defer></script>
 {% endblock %}

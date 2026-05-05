@@ -6,7 +6,11 @@
    és tartalmazza a sectiononként kibontott látható item-eket
    badge-ekkel és aktív flag-gel.
 #}
-<aside class="sidebar">
+<aside class="sidebar"
+       hx-get="/rendelo/notify/poll"
+       hx-trigger="every 60s"
+       hx-target="this"
+       hx-swap="outerHTML">
 
   <div class="brand">
     <img src="{{ url_for('static', path='img/logo.svg') }}" alt="PrintBT Hub" class="brand-logo">
