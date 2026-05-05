@@ -318,6 +318,101 @@ async def rendelo_new_submit(
     return RedirectResponse(url=f"/rendelo/{req.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+# ───────────────────────── archive (statikus path — ELŐBB mint /{int}) ───
+
+
+@router.get("/archive", response_class=HTMLResponse)
+def rendelo_archive(
+    request: FastAPIRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+    from_date: str | None = Query(None),
+    to_date: str | None = Query(None),
+    category: int | None = Query(None),
+    q: str | None = Query(None),
+) -> HTMLResponse:
+    """Lezárt és érkezett igények archívuma. Default 2 év, dátum-szűrőkkel.
+
+    FONTOS: ennek az endpointnak a `/{request_id}` GET ELŐTT kell lennie,
+    különben az `archive` string `request_id`-ként parse-olódna és 422-t ad.
+    """
+    from datetime import datetime
+
+    cutoff = utcnow() - timedelta(days=730)
+
+    stmt = (
+        select(Request)
+        .options(
+            selectinload(Request.lines),
+            selectinload(Request.requested_by),
+            selectinload(Request.ordered_by),
+            selectinload(Request.category),
+        )
+        .where(Request.status.in_([RequestStatus.ARRIVED, RequestStatus.CANCELLED]))
+    )
+
+    parsed_from = None
+    parsed_to = None
+    if from_date:
+        try:
+            parsed_from = datetime.fromisoformat(from_date)
+        except ValueError:
+            parsed_from = None
+    if to_date:
+        try:
+            parsed_to = datetime.fromisoformat(to_date)
+            parsed_to = parsed_to.replace(hour=23, minute=59, second=59)
+        except ValueError:
+            parsed_to = None
+
+    if parsed_from:
+        stmt = stmt.where(Request.created_at >= parsed_from)
+    else:
+        stmt = stmt.where(Request.created_at >= cutoff)
+    if parsed_to:
+        stmt = stmt.where(Request.created_at <= parsed_to)
+
+    if category is not None:
+        stmt = stmt.where(Request.category_id == category)
+
+    if q and q.strip():
+        like = f"%{q.strip().lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Request.note).like(like),
+                func.lower(Request.supplier).like(like),
+                func.lower(Request.order_ref).like(like),
+            )
+        )
+
+    stmt = stmt.order_by(Request.created_at.desc())
+    items = db.execute(stmt).scalars().all()
+
+    by_month: dict[str, list[Request]] = {}
+    for it in items:
+        key = it.created_at.strftime("%Y-%m")
+        by_month.setdefault(key, []).append(it)
+
+    return templates.TemplateResponse(
+        request,
+        "rendelo/archive.html",
+        {
+            "user": user,
+            "title": "Archívum",
+            "topbar_title": "Archívum",
+            "topbar_subtitle": f"{len(items)} lezárt igény",
+            "items": items,
+            "by_month": by_month,
+            "categories": _categories(db),
+            "from_date": from_date or "",
+            "to_date": to_date or "",
+            "active_category": category,
+            "q": q or "",
+            **sidebar_context(db, user, active_key="rendelo_archive"),
+        },
+    )
+
+
 # ───────────────────────── detail ─────────────────────────
 
 
@@ -429,101 +524,7 @@ def rendelo_change_state(
     return RedirectResponse(url=f"/rendelo/{obj.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# ───────────────────────── comments ─────────────────────────
-
-
-@router.get("/archive", response_class=HTMLResponse)
-def rendelo_archive(
-    request: FastAPIRequest,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-    from_date: str | None = Query(None),
-    to_date: str | None = Query(None),
-    category: int | None = Query(None),
-    q: str | None = Query(None),
-) -> HTMLResponse:
-    """Lezárt és érkezett igények arcívuma. Default 2 év, dátum-szűrőkkel."""
-    from datetime import datetime
-
-    # Default ablak: utolsó 2 év
-    cutoff = utcnow() - timedelta(days=730)
-
-    stmt = (
-        select(Request)
-        .options(
-            selectinload(Request.lines),
-            selectinload(Request.requested_by),
-            selectinload(Request.ordered_by),
-            selectinload(Request.category),
-        )
-        .where(
-            Request.status.in_([RequestStatus.ARRIVED, RequestStatus.CANCELLED]),
-        )
-    )
-
-    # Dátum-szűrők (a created_at-on)
-    parsed_from = None
-    parsed_to = None
-    if from_date:
-        try:
-            parsed_from = datetime.fromisoformat(from_date)
-        except ValueError:
-            parsed_from = None
-    if to_date:
-        try:
-            parsed_to = datetime.fromisoformat(to_date)
-            # +1 nap, hogy az adott napot egészként vegyük figyelembe
-            parsed_to = parsed_to.replace(hour=23, minute=59, second=59)
-        except ValueError:
-            parsed_to = None
-
-    if parsed_from:
-        stmt = stmt.where(Request.created_at >= parsed_from)
-    else:
-        stmt = stmt.where(Request.created_at >= cutoff)
-    if parsed_to:
-        stmt = stmt.where(Request.created_at <= parsed_to)
-
-    if category is not None:
-        stmt = stmt.where(Request.category_id == category)
-
-    if q and q.strip():
-        like = f"%{q.strip().lower()}%"
-        stmt = stmt.where(
-            or_(
-                func.lower(Request.note).like(like),
-                func.lower(Request.supplier).like(like),
-                func.lower(Request.order_ref).like(like),
-            )
-        )
-
-    stmt = stmt.order_by(Request.created_at.desc())
-    items = db.execute(stmt).scalars().all()
-
-    # Hónap-csoportosítás (YYYY-MM)
-    by_month: dict[str, list[Request]] = {}
-    for it in items:
-        key = it.created_at.strftime("%Y-%m")
-        by_month.setdefault(key, []).append(it)
-
-    return templates.TemplateResponse(
-        request,
-        "rendelo/archive.html",
-        {
-            "user": user,
-            "title": "Archívum",
-            "topbar_title": "Archívum",
-            "topbar_subtitle": f"{len(items)} lezárt igény",
-            "items": items,
-            "by_month": by_month,
-            "categories": _categories(db),
-            "from_date": from_date or "",
-            "to_date": to_date or "",
-            "active_category": category,
-            "q": q or "",
-            **sidebar_context(db, user, active_key="rendelo_list"),
-        },
-    )
+# ───────────────────────── edit + comments ─────────────────────────
 
 
 @router.get("/{request_id}/edit", response_class=HTMLResponse)

@@ -351,6 +351,59 @@ def cmd_refresh_malfini_stock(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_seed_rendelo_categories(_args: argparse.Namespace) -> int:
+    """A Rendelő modul alap-kategóriáit beülteti / frissíti idempotensen.
+
+    A régi `nyomda_rendelo` rendszer 12 kategóriáját, név + sorrend +
+    szín-hex hármasokkal. Meglévő név → szín és sort_order frissül.
+    """
+    init_db()
+
+    from app.modules.rendelo.models import Category
+
+    SEED: list[tuple[str, int, str]] = [
+        ("Toner", 1, "#C5301F"),
+        ("Festék", 20, "#F97316"),
+        ("Papír", 30, "#FBBF24"),
+        ("Vegyszer", 40, "#FEF3C7"),
+        ("Gépkellék", 50, "#9CA3AF"),
+        ("Iratfűzés", 60, "#A8A29E"),
+        ("Bélyegző", 70, "#7F1D1D"),
+        ("Póló", 80, "#65A30D"),
+        ("Serleg/Érem/Üveg.", 90, "#D1D5DB"),
+        ("Reklámajándék", 100, "#FB923C"),
+        ("Ajándéktárgy", 110, "#6B7280"),
+        ("EGYÉB", 120, "#8A8474"),
+    ]
+
+    with SessionLocal() as db:
+        added = 0
+        updated = 0
+        for name, sort_order, color in SEED:
+            existing = db.execute(
+                select(Category).where(Category.name == name)
+            ).scalar_one_or_none()
+            if existing is None:
+                db.add(Category(name=name, color=color, sort_order=sort_order))
+                added += 1
+                print(f"  + új: {name:<20}  {sort_order:>3}  {color}")
+            else:
+                changed = False
+                if existing.color != color:
+                    existing.color = color
+                    changed = True
+                if existing.sort_order != sort_order:
+                    existing.sort_order = sort_order
+                    changed = True
+                if changed:
+                    updated += 1
+                    print(f"  → frissítve: {name:<20}  {sort_order:>3}  {color}")
+        db.commit()
+        print()
+        print(f"Kész: {added} új, {updated} frissítve, {len(SEED) - added - updated} változatlan.")
+    return 0
+
+
 def cmd_generate_invite(args: argparse.Namespace) -> int:
     init_db()
     flags = _parse_roles(args.roles)
@@ -436,6 +489,12 @@ def main() -> int:
         help="A `clean` státuszúakat is újraszkenneli (pl. ha új vírus-def jött)",
     )
     p_rescan.set_defaults(func=cmd_rescan_attachments)
+
+    p_seed_cats = sub.add_parser(
+        "seed-rendelo-categories",
+        help="A Rendelő alap-kategóriáit beülteti / frissíti (Toner, Festék, …)",
+    )
+    p_seed_cats.set_defaults(func=cmd_seed_rendelo_categories)
 
     p_reclass = sub.add_parser(
         "reclassify-emails",
