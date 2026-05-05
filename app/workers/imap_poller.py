@@ -11,14 +11,12 @@ Minden aktív `EmailAccount`-ot sorra vesz:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from imap_tools import AND, MailBox, MailboxLoginError, MailMessage
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
-from datetime import timedelta
 
 from app.modules.jobs.email_classifier import apply_classification, classify_email
 from app.modules.jobs.email_crypto import decrypt_password
@@ -41,10 +39,14 @@ INITIAL_FETCH_LIMIT = 50
 
 
 def _safe_filename(name: str) -> str:
-    """Fájlnév tisztítása — csak biztonságos karakterek."""
-    # Csak alfanumerikus + . - _ és szóköz
+    """Fájlnév tisztítása — csak biztonságos karakterek.
+
+    Visszadob `unnamed`-et üres / csak ponttal kezdődő bemenetre, hogy
+    rejtett (`.bashrc`-szerű) fájl ne keletkezzen a feltöltési mappában.
+    """
     clean = "".join(c if (c.isalnum() or c in ".-_ ") else "_" for c in name)
-    return clean.strip() or "unnamed"
+    clean = clean.strip().lstrip(".")
+    return clean or "unnamed"
 
 
 def _attachment_dir(from_address: str) -> Path:

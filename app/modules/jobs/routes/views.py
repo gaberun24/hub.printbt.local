@@ -1082,6 +1082,47 @@ def _job_file_dir(public_id: str) -> Path:
     return d
 
 
+def _can_modify_job_files(user: User) -> bool:
+    """Ki tölthet fel / törölhet fájlt egy Job-on.
+
+    Admin: mindig. Felvevő, grafikus és műhelyes: igen (a saját
+    workflow-juk része). Az `is_quote_handler` és `is_orderer` viszont
+    nem érintett a műhelyi fájlkezelésben — kizárva.
+    """
+    return bool(
+        user.is_admin or user.is_intake or user.is_designer or user.is_workshop
+    )
+
+
+def _can_delete_attachment(user: User, att: JobAttachment) -> bool:
+    """Egy konkrét csatolmány törlésére jogosult.
+
+    Admin mindig. Egyébként csak az aki feltöltötte (uploaded_by_id),
+    vagy az adott Job felvevője (intake_user_id) — utóbbi miatt egy
+    grafikus nem törölheti a felvevő által csatolt ügyfél-anyagot,
+    csak az admin vagy az aki épp feltöltötte.
+    """
+    if user.is_admin:
+        return True
+    if att.uploaded_by_id == user.id:
+        return True
+    if att.job.intake_user_id == user.id:
+        return True
+    return False
+
+
+def _safe_attachment_name(filename: str) -> str:
+    """Csatolmány-fájlnév tisztítása.
+
+    A `..` és vezető pontok eltávolítva, hogy ne hozzon létre rejtett
+    fájlt vagy próbáljon path-traversal-t. Az illegális karakterek
+    aláhúzásra cserélve.
+    """
+    clean = "".join(c if (c.isalnum() or c in ".-_ ") else "_" for c in filename)
+    clean = clean.strip().lstrip(".")
+    return clean or "unnamed"
+
+
 @router.post("/{public_id}/files/upload")
 async def job_file_upload(
     public_id: str,
@@ -1090,26 +1131,59 @@ async def job_file_upload(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    """Fájl(ok) feltöltése egy munkához."""
+    """Fájl(ok) feltöltése egy munkához. Vírus-szkennelt — INFECTED esetén
+    a teljes batch megszakad (atomikus, semmit nem mentünk)."""
+    from app.modules.jobs.email_models import ScanStatus
+    from app.modules.jobs.virus_scanner import scan_bytes
+
     job = _load_job_or_404(db, public_id)
+
+    if not _can_modify_job_files(user):
+        raise HTTPException(403, "Nincs jogod fájlt feltölteni ehhez a munkához.")
 
     try:
         file_kind = AttachmentKind(kind)
     except ValueError:
         file_kind = AttachmentKind.OTHER
 
-    dest_dir = _job_file_dir(public_id)
-    count = 0
-
+    # ── 1) Először minden fájlt be-olvasunk és vírus-szkennelünk.
+    #     INFECTED esetén az egész batch reject — nem szépítjük csendesen.
+    files_to_save: list[tuple[str, bytes, str | None]] = []
     for f in files:
         if not f.filename or not f.size:
             continue
         data = await f.read()
+        if not data:
+            continue
 
-        safe_name = "".join(
-            c if (c.isalnum() or c in ".-_ ") else "_" for c in f.filename
-        ).strip() or "unnamed"
+        status, detail = scan_bytes(data)
+        if status == ScanStatus.INFECTED:
+            raise HTTPException(
+                400,
+                f"Fertőzött fájl: {f.filename} → {detail}. "
+                "A feltöltés megszakítva, egyetlen fájl sem lett mentve.",
+            )
+        # SKIPPED (nincs ClamAV) és CLEAN egyaránt OK; ERROR-t logoljuk
+        if status == ScanStatus.ERROR:
+            # Nem blokkolunk — a meghiúsult szkennelést loggal jelezzük
+            import logging as _logging
 
+            _logging.getLogger(__name__).warning(
+                "ClamAV scan ERROR a job-feltöltésen: %s — %s", f.filename, detail
+            )
+
+        ct = f.content_type or mimetypes.guess_type(f.filename)[0]
+        files_to_save.append((f.filename, data, ct))
+
+    if not files_to_save:
+        return RedirectResponse(url=f"/jobs/{public_id}#files", status_code=303)
+
+    # ── 2) Mind tiszta — fájlrendszerre mentés + DB rekord
+    dest_dir = _job_file_dir(public_id)
+    count = 0
+
+    for filename, data, ct in files_to_save:
+        safe_name = _safe_attachment_name(filename)
         dest = dest_dir / safe_name
         counter = 1
         while dest.exists():
@@ -1119,11 +1193,10 @@ async def job_file_upload(
 
         dest.write_bytes(data)
 
-        ct = f.content_type or mimetypes.guess_type(f.filename)[0]
         att = JobAttachment(
             job_id=job.id,
             kind=file_kind,
-            filename=f.filename,
+            filename=filename,
             file_path=str(dest.relative_to(Path(settings.upload_dir))),
             size_bytes=len(data),
             content_type=ct,
@@ -1150,10 +1223,11 @@ async def job_file_upload(
 def job_file_download(
     public_id: str,
     attachment_id: int,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user),  # noqa: ARG001  (auth-only)
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    """Fájl letöltése."""
+    """Fájl letöltése. Auth elég: aki bejelentkezett, és látja a Job-ot,
+    le tudja tölteni a hozzá tartozó fájlokat."""
     _load_job_or_404(db, public_id)
     att = db.get(JobAttachment, attachment_id)
     if att is None or att.job.public_id != public_id:
@@ -1182,6 +1256,12 @@ def job_file_delete(
     att = db.get(JobAttachment, attachment_id)
     if att is None or att.job_id != job.id:
         raise HTTPException(404, "Fájl nem található.")
+
+    if not _can_delete_attachment(user, att):
+        raise HTTPException(
+            403,
+            "Csak admin, a feltöltő, vagy a munka felvevője törölheti ezt a fájlt.",
+        )
 
     filepath = Path(settings.upload_dir) / att.file_path
     if filepath.exists():

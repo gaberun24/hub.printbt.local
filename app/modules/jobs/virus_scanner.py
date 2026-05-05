@@ -53,6 +53,42 @@ def _get_clamd():
     return None
 
 
+def _interpret_clamd_result(result: dict | None) -> tuple[ScanStatus, str | None]:
+    """A `cd.scan_stream` válaszának értelmezése.
+
+    A pyclamd None-t ad ha tiszta, és `{'stream': ('FOUND', detail)}`-et
+    ha találat van. Az `ERROR` is ide kerülhet.
+    """
+    if result is None:
+        return ScanStatus.CLEAN, None
+    status_str, detail = result.get("stream", ("ERROR", "unexpected response"))
+    if status_str == "FOUND":
+        return ScanStatus.INFECTED, detail
+    if status_str == "ERROR":
+        return ScanStatus.ERROR, detail
+    return ScanStatus.CLEAN, None
+
+
+def scan_bytes(data: bytes) -> tuple[ScanStatus, str | None]:
+    """Memóriában lévő bytes szkennelése (instream).
+
+    Akkor hasznos ha a fájl még nincs a fájlrendszeren — pl. UploadFile-ból
+    olvasott bytes, és csak akkor mentenénk le, ha tiszta.
+
+    Returns: (status, részlet) — pl. (INFECTED, "Win.Trojan.Agent-123")
+    """
+    cd = _get_clamd()
+    if cd is None:
+        return ScanStatus.SKIPPED, None
+
+    try:
+        result = cd.scan_stream(data)
+        return _interpret_clamd_result(result)
+    except Exception as exc:
+        log.exception("ClamAV scan_bytes hiba (%d byte)", len(data))
+        return ScanStatus.ERROR, str(exc)[:300]
+
+
 def scan_file(filepath: Path) -> tuple[ScanStatus, str | None]:
     """Egyetlen fájl szkennelése (instream — a fájl tartalmát küldi a daemonnak).
 
@@ -68,18 +104,7 @@ def scan_file(filepath: Path) -> tuple[ScanStatus, str | None]:
     try:
         with open(filepath, "rb") as f:
             result = cd.scan_stream(f.read())
-
-        if result is None:
-            return ScanStatus.CLEAN, None
-
-        # result: {'stream': ('FOUND', 'Win.Trojan.Agent-123')}
-        status_str, detail = result.get("stream", ("ERROR", "unexpected response"))
-        if status_str == "FOUND":
-            return ScanStatus.INFECTED, detail
-        if status_str == "ERROR":
-            return ScanStatus.ERROR, detail
-        return ScanStatus.CLEAN, None
-
+        return _interpret_clamd_result(result)
     except Exception as exc:
         log.exception("ClamAV scan hiba: %s", filepath.name)
         return ScanStatus.ERROR, str(exc)[:300]
