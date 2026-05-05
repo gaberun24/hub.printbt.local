@@ -139,11 +139,40 @@ def _check_spam(subject: str | None, body_text: str | None, from_address: str) -
     return spam_hits >= 2  # noqa: PLR2004
 
 
+def _classify_with_ai(email: IncomingEmail) -> ClassificationResult | None:
+    """A 4. lépcső — provider-aware AI hívás.
+
+    A `settings.ai_provider` alapján:
+      - "gemini"    → Google Gemini Flash API
+      - "lm_studio" → Helyi LM Studio (OpenAI-kompatibilis)
+      - "none"      → AI kihagyva, fallback OTHER
+
+    Visszaad egy ClassificationResult-ot, vagy None-t ha hiba van /
+    a provider nincs konfigurálva.
+    """
+    from app.shared.config import settings
+
+    provider = (settings.ai_provider or "none").lower().strip()
+
+    if provider == "gemini":
+        from app.modules.jobs.gemini_client import classify_with_gemini
+
+        return classify_with_gemini(email)
+
+    if provider == "lm_studio":
+        from app.modules.jobs.lm_studio_client import classify_with_lm_studio
+
+        return classify_with_lm_studio(email)
+
+    # provider == "none" vagy ismeretlen
+    return None
+
+
 def classify_email(
     db: Session,
     email: IncomingEmail,
     *,
-    use_gemini: bool = True,
+    use_gemini: bool = True,  # backward-compat — most use_ai-ként értelmezzük
 ) -> ClassificationResult:
     """Egy emailt végigfuttat a 4-lépcsős pipeline-on.
 
@@ -180,22 +209,21 @@ def classify_email(
             confidence=0.9,
         )
 
-    # ── 4. Gemini flash ──
+    # ── 4. AI (Gemini vagy LM Studio, az `ai_provider` setting alapján) ──
     if use_gemini:
-        from app.modules.jobs.gemini_client import classify_with_gemini
-
-        result = classify_with_gemini(email)
+        result = _classify_with_ai(email)
         if result:
             log.info(
-                "Email #%s → %s (Gemini, %.0f%%)",
+                "Email #%s → %s (%s, %.0f%%)",
                 email.id,
                 result.category,
+                result.classified_by,
                 result.confidence * 100,
             )
             return result
 
-    # Ha Gemini nincs konfigurálva vagy hibázott → OTHER
-    log.info("Email #%s → OTHER (fallback, nincs Gemini)", email.id)
+    # Ha az AI nincs konfigurálva vagy hibázott → OTHER
+    log.info("Email #%s → OTHER (fallback, nincs AI)", email.id)
     return ClassificationResult(
         category=EmailCategory.OTHER,
         classified_by=ClassifiedBy.RULE_FALLBACK,
