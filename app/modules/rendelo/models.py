@@ -85,6 +85,11 @@ class Item(Base):
     supplier: Mapped[str | None] = mapped_column(String(120), nullable=True)
     default_unit: Mapped[str] = mapped_column(String(32), nullable=False, default="db")
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Stock — Malfini B2B API-ból szinkronizált aktuális készlet. NULL = még
+    # sose lett szinkronizálva (vagy a Malfini API nem ismerte ezt a kódot).
+    # Csak a brand=Malfini + valid code Item-eknél van értelme.
+    stock_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stock_fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     category: Mapped[Category] = relationship(back_populates="items")
