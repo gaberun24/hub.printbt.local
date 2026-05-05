@@ -109,6 +109,13 @@ tudnátok-e csinálni, stb. Nincs konkrét megrendelés, csak érdeklődés.
 levelezés. Ha bizonytalan vagy, inkább ide sorold.
 - spam: Reklám, hírlevél, automatikus értesítés, marketing kampány, csaló email.
 
+KÜLÖN ESET — cloud-fájlmegosztás: a „X megosztott egy fájlt Önnel" / \
+„shared a file with you" / „WeTransfer" / „Google Drive" / „OneDrive" / \
+„Dropbox" / „Mega.nz" típusú megosztás-értesítések nálunk **általában work** — \
+az ügyfél nyomdakész anyagot küldött át a felhőn keresztül. Csak akkor sorold \
+spam-be, ha sem a feladó neve, sem a megosztó személy neve, sem a fájlnév nem \
+sugall semmilyen ügyfél-szándékot.
+
 FONTOS: A „supplier" kategóriát NE használd — a szállítói emaileket már \
 korábban kiszűrtük, ide nem jutnak el.
 
