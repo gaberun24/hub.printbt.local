@@ -457,22 +457,21 @@ def ai_config_form(
     )
 
 
-@router.post("/ai-config")
-def ai_config_save(
-    user: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-    provider: str = Form("none"),
-    gemini_api_key: str = Form(""),
-    gemini_model: str = Form("gemini-2.5-flash"),
-    ollama_url: str = Form(""),
-    ollama_model: str = Form("qwen2.5:7b"),
-    ollama_timeout_sec: int = Form(60),
-    lm_studio_url: str = Form(""),
-    lm_studio_model: str = Form("gemma-4-e4b"),
-    lm_studio_timeout_sec: int = Form(60),
-) -> Response:
-    """AI config mentés. Az API kulcs csak akkor íródik felül, ha új érték van —
-    üres mező = változatlan (mint az IMAP fióknál)."""
+def _save_ai_config(
+    db: Session,
+    user: User,
+    *,
+    provider: str,
+    gemini_api_key: str,
+    gemini_model: str,
+    ollama_url: str,
+    ollama_model: str,
+    ollama_timeout_sec: int,
+    lm_studio_url: str,
+    lm_studio_model: str,
+    lm_studio_timeout_sec: int,
+) -> None:
+    """AI config mentés helper. Az üresen hagyott API kulcs változatlan marad."""
     from app.modules.jobs.ai_settings import set_setting
 
     if provider not in ("none", "gemini", "ollama", "lm_studio"):
@@ -490,6 +489,34 @@ def ai_config_save(
     set_setting(db, "ai.lm_studio_timeout_sec", str(max(5, lm_studio_timeout_sec)), user_id=user.id)
     db.commit()
 
+
+@router.post("/ai-config")
+def ai_config_save(
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    provider: str = Form("none"),
+    gemini_api_key: str = Form(""),
+    gemini_model: str = Form("gemini-2.5-flash"),
+    ollama_url: str = Form(""),
+    ollama_model: str = Form("qwen2.5:7b"),
+    ollama_timeout_sec: int = Form(60),
+    lm_studio_url: str = Form(""),
+    lm_studio_model: str = Form("gemma-4-e4b"),
+    lm_studio_timeout_sec: int = Form(60),
+) -> Response:
+    """AI config mentés. Az API kulcs csak akkor íródik felül, ha új érték van."""
+    _save_ai_config(
+        db, user,
+        provider=provider,
+        gemini_api_key=gemini_api_key,
+        gemini_model=gemini_model,
+        ollama_url=ollama_url,
+        ollama_model=ollama_model,
+        ollama_timeout_sec=ollama_timeout_sec,
+        lm_studio_url=lm_studio_url,
+        lm_studio_model=lm_studio_model,
+        lm_studio_timeout_sec=lm_studio_timeout_sec,
+    )
     return RedirectResponse(url="/admin/ai-config", status_code=303)
 
 
@@ -498,13 +525,38 @@ def ai_config_test(
     request: FastAPIRequest,
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
+    provider: str = Form("none"),
+    gemini_api_key: str = Form(""),
+    gemini_model: str = Form("gemini-2.5-flash"),
+    ollama_url: str = Form(""),
+    ollama_model: str = Form("qwen2.5:7b"),
+    ollama_timeout_sec: int = Form(60),
+    lm_studio_url: str = Form(""),
+    lm_studio_model: str = Form("gemma-4-e4b"),
+    lm_studio_timeout_sec: int = Form(60),
 ) -> HTMLResponse:
-    """Az aktuális AI provider tesztelése egy szintetikus emailen."""
+    """Az aktuális AI provider tesztelése. Először MENTI az aktuális form-mezőket
+    (mint a Save endpoint), aztán futtat egy szintetikus emailen — különben a
+    user által épp beírt URL-t/key-t nem látná a tesztelő (a régi DB-érték menne)."""
     from app.modules.jobs.ai_settings import get_ai_config
     from app.modules.jobs.email_classifier import _classify_with_ai
     from app.modules.jobs.email_models import IncomingEmail
 
-    # Szintetikus minta-email — nem mentjük DB-be, csak lefuttatjuk rajta a classifier-t
+    # 1) Az épp beírt értékek mentése a DB-be — különben a régi config-on tesztelnénk
+    _save_ai_config(
+        db, user,
+        provider=provider,
+        gemini_api_key=gemini_api_key,
+        gemini_model=gemini_model,
+        ollama_url=ollama_url,
+        ollama_model=ollama_model,
+        ollama_timeout_sec=ollama_timeout_sec,
+        lm_studio_url=lm_studio_url,
+        lm_studio_model=lm_studio_model,
+        lm_studio_timeout_sec=lm_studio_timeout_sec,
+    )
+
+    # 2) Szintetikus minta-email — nem mentjük DB-be, csak lefuttatjuk rajta a classifier-t
     sample = IncomingEmail(
         id=0,
         account_id=0,
@@ -519,7 +571,7 @@ def ai_config_test(
 
     cfg = get_ai_config(db)
     if cfg.provider == "none":
-        result_text = "Nincs aktív AI provider — válassz egyet, mentsd, és próbáld újra."
+        result_text = "Nincs aktív AI provider — válassz egyet és próbáld újra."
         ok = False
     else:
         try:
