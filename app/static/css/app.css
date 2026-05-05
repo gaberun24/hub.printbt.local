@@ -5,6 +5,7 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   --bg: #F5F1E8;
   --bg-grain: rgba(31, 27, 22, 0.015);
   --surface: #FFFFFF;
@@ -36,6 +37,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg: #161310;
   --bg-grain: rgba(245, 241, 232, 0.012);
   --surface: #221F1B;
@@ -82,7 +84,11 @@ html, body {
 }
 
 button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
-input, textarea { font: inherit; color: inherit; }
+input, textarea, select { font: inherit; color: inherit; }
+/* A select natív dropdown opciói (Webkit/Blink) explicit color/bg-t igényelnek
+   — a `color-scheme` jó alap, de Edge/Chrome néha "system white"-tal renderol.
+   A backround-ra a surface-2-t adjuk hogy a theme-hez illeszkedjen. */
+option { background: var(--surface-2); color: var(--ink); }
 ul { list-style: none; }
 a { color: inherit; text-decoration: none; }
 
@@ -2399,16 +2405,19 @@ select.compose-input {
   width: 100%;
   padding: 9px 12px;
   background: var(--surface);
+  color: var(--ink);
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 13px;
   outline: none;
 }
 .form-input:focus { border-color: var(--ink-muted); }
+.form-input::placeholder { color: var(--ink-subtle); }
 .form-textarea {
   width: 100%;
   padding: 10px 12px;
   background: var(--surface);
+  color: var(--ink);
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 13px;
@@ -2418,6 +2427,7 @@ select.compose-input {
   min-height: 80px;
 }
 .form-textarea:focus { border-color: var(--ink-muted); }
+.form-textarea::placeholder { color: var(--ink-subtle); }
 .form-checkbox {
   display: flex;
   align-items: center;
@@ -2449,11 +2459,13 @@ select.compose-input {
 .task-builder-row input {
   padding: 6px 8px;
   background: var(--surface);
+  color: var(--ink);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 12px;
   outline: none;
 }
+.task-builder-row input::placeholder { color: var(--ink-subtle); }
 .task-builder-row .qty { text-align: right; font-family: var(--font-mono); }
 
 /* Scrollbar */
