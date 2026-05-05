@@ -20,8 +20,9 @@ import logging
 import urllib.error
 import urllib.request
 
+from sqlalchemy.orm import Session
+
 from app.modules.jobs.email_models import IncomingEmail
-from app.shared.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -76,16 +77,18 @@ def _post_chat(url: str, body: dict, timeout: int) -> dict | None:
     return None
 
 
-def classify_with_ollama(email: IncomingEmail):
+def classify_with_ollama(db: Session, email: IncomingEmail):
     """Email osztályozása Ollama-val.
 
     Visszaad egy ClassificationResult-ot, vagy None-t ha hiba van
     (a classifier ekkor RULE_FALLBACK / OTHER-re esik).
     """
+    from app.modules.jobs.ai_settings import get_ai_config
     from app.modules.jobs.email_classifier import ClassificationResult
     from app.modules.jobs.email_models import ClassifiedBy, EmailCategory
 
-    if not settings.ollama_url:
+    cfg = get_ai_config(db)
+    if not cfg.ollama_url:
         return None
 
     subject = email.subject or "(nincs tárgy)"
@@ -95,7 +98,7 @@ def classify_with_ollama(email: IncomingEmail):
     user_prompt = f"Feladó: {from_info}\nTárgy: {subject}\n\n{body}"
 
     chat_body = {
-        "model": settings.ollama_model,
+        "model": cfg.ollama_model,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
@@ -110,8 +113,8 @@ def classify_with_ollama(email: IncomingEmail):
         },
     }
 
-    url = settings.ollama_url.rstrip("/") + "/api/chat"
-    data = _post_chat(url, chat_body, settings.ollama_timeout_sec)
+    url = cfg.ollama_url.rstrip("/") + "/api/chat"
+    data = _post_chat(url, chat_body, cfg.ollama_timeout_sec)
     if data is None:
         return None
 

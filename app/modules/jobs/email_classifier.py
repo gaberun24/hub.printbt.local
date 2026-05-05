@@ -139,35 +139,36 @@ def _check_spam(subject: str | None, body_text: str | None, from_address: str) -
     return spam_hits >= 2  # noqa: PLR2004
 
 
-def _classify_with_ai(email: IncomingEmail) -> ClassificationResult | None:
+def _classify_with_ai(db: Session, email: IncomingEmail) -> ClassificationResult | None:
     """A 4. lépcső — provider-aware AI hívás.
 
-    A `settings.ai_provider` alapján:
+    A runtime config (system_settings tábla, fallback .env) alapján:
       - "gemini"    → Google Gemini Flash API
+      - "ollama"    → Helyi Ollama szerver
       - "lm_studio" → Helyi LM Studio (OpenAI-kompatibilis)
       - "none"      → AI kihagyva, fallback OTHER
 
     Visszaad egy ClassificationResult-ot, vagy None-t ha hiba van /
     a provider nincs konfigurálva.
     """
-    from app.shared.config import settings
+    from app.modules.jobs.ai_settings import get_ai_config
 
-    provider = (settings.ai_provider or "none").lower().strip()
+    provider = get_ai_config(db).provider
 
     if provider == "gemini":
         from app.modules.jobs.gemini_client import classify_with_gemini
 
-        return classify_with_gemini(email)
+        return classify_with_gemini(db, email)
 
     if provider == "ollama":
         from app.modules.jobs.ollama_client import classify_with_ollama
 
-        return classify_with_ollama(email)
+        return classify_with_ollama(db, email)
 
     if provider == "lm_studio":
         from app.modules.jobs.lm_studio_client import classify_with_lm_studio
 
-        return classify_with_lm_studio(email)
+        return classify_with_lm_studio(db, email)
 
     # provider == "none" vagy ismeretlen
     return None
@@ -214,9 +215,9 @@ def classify_email(
             confidence=0.9,
         )
 
-    # ── 4. AI (Gemini vagy LM Studio, az `ai_provider` setting alapján) ──
+    # ── 4. AI (Gemini / Ollama / LM Studio — runtime config alapján) ──
     if use_gemini:
-        result = _classify_with_ai(email)
+        result = _classify_with_ai(db, email)
         if result:
             log.info(
                 "Email #%s → %s (%s, %.0f%%)",

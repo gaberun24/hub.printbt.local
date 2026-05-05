@@ -277,7 +277,7 @@ DEFAULT_SYSTEM_SETTINGS: dict[str, tuple[str, str]] = {
         "dpd.hu,gls-group.eu,foxpost.hu,mpl.hu,billingo.hu,szamlazz.hu",
         "Ismert szállítói email domain-ek vesszővel elválasztva. "
         "Ezekről érkező emailek automatikusan a Szállító tabra kerülnek, "
-        "Gemini nélkül.",
+        "AI nélkül.",
     ),
     "email.spam_purge_days": (
         "7",
@@ -286,6 +286,43 @@ DEFAULT_SYSTEM_SETTINGS: dict[str, tuple[str, str]] = {
     "email.supplier_purge_days": (
         "30",
         "Szállítói emailek automatikus törlése ennyi nap után.",
+    ),
+    # ── AI provider runtime config (admin UI-ról szerkeszthető) ──
+    "ai.provider": (
+        "none",
+        "Email osztályozó AI provider: none | gemini | ollama | lm_studio",
+    ),
+    "ai.gemini_api_key": (
+        "",
+        "Google Gemini Flash API kulcs (titkosítva tárolva)",
+    ),
+    "ai.gemini_model": (
+        "gemini-2.5-flash",
+        "Gemini modell neve",
+    ),
+    "ai.ollama_url": (
+        "",
+        "Ollama szerver URL (pl. http://192.168.1.248:11434)",
+    ),
+    "ai.ollama_model": (
+        "qwen2.5:7b",
+        "Ollama modell neve",
+    ),
+    "ai.ollama_timeout_sec": (
+        "60",
+        "Ollama HTTP timeout másodpercben",
+    ),
+    "ai.lm_studio_url": (
+        "",
+        "LM Studio OpenAI-kompatibilis URL (pl. http://192.168.1.X:1234/v1)",
+    ),
+    "ai.lm_studio_model": (
+        "gemma-4-e4b",
+        "LM Studio modell neve",
+    ),
+    "ai.lm_studio_timeout_sec": (
+        "60",
+        "LM Studio HTTP timeout másodpercben",
     ),
 }
 

@@ -1,0 +1,136 @@
+{% extends "app.html" %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">AI <em>beállítások</em></h1>
+<div class="greeting-date">email osztályozó AI provider runtime config</div>
+
+{% if test_result %}
+  <div class="panel" style="margin-top: 16px; padding: 14px 18px; border-left: 3px solid {% if test_ok %}var(--success){% else %}var(--accent){% endif %};">
+    <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 4px;">
+      {% if test_ok %}Teszt sikeres{% else %}Teszt eredménye{% endif %}
+    </div>
+    <div style="white-space: pre-wrap;">{{ test_result }}</div>
+  </div>
+{% endif %}
+
+<form method="post" action="/admin/ai-config" id="ai-form">
+
+  <div class="panel" style="margin-top: 24px;">
+    <div class="panel-header">
+      <div class="panel-title">Provider választás</div>
+    </div>
+    <div class="panel-body">
+      <div style="display:flex; flex-wrap:wrap; gap: 12px;">
+        <label class="form-checkbox" style="cursor: pointer;">
+          <input type="radio" name="provider" value="none" {% if cfg.provider == "none" %}checked{% endif %} onchange="updateSections()">
+          <span style="margin-left: 4px;">Nincs (mindent OTHER-be)</span>
+        </label>
+        <label class="form-checkbox" style="cursor: pointer;">
+          <input type="radio" name="provider" value="gemini" {% if cfg.provider == "gemini" %}checked{% endif %} onchange="updateSections()">
+          <span style="margin-left: 4px;">Gemini Flash <span style="color: var(--ink-subtle); font-size: 11px;">(felhő)</span></span>
+        </label>
+        <label class="form-checkbox" style="cursor: pointer;">
+          <input type="radio" name="provider" value="ollama" {% if cfg.provider == "ollama" %}checked{% endif %} onchange="updateSections()">
+          <span style="margin-left: 4px;">Ollama <span style="color: var(--ink-subtle); font-size: 11px;">(céges, JSON-mode)</span></span>
+        </label>
+        <label class="form-checkbox" style="cursor: pointer;">
+          <input type="radio" name="provider" value="lm_studio" {% if cfg.provider == "lm_studio" %}checked{% endif %} onchange="updateSections()">
+          <span style="margin-left: 4px;">LM Studio <span style="color: var(--ink-subtle); font-size: 11px;">(céges, OpenAI-kompatibilis)</span></span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  {# ── Gemini section ─────────────────────────────────────── #}
+  <div class="panel" id="section-gemini" style="margin-top: 16px;">
+    <div class="panel-header">
+      <div class="panel-title">Gemini Flash</div>
+    </div>
+    <div class="panel-body">
+      <div class="form-grid">
+        <div class="form-group" style="grid-column: span 2;">
+          <label class="form-label">API kulcs</label>
+          <input class="form-input" type="password" name="gemini_api_key"
+                 placeholder="{% if has_gemini_key %}(változatlan ha üresen hagyod){% else %}https://aistudio.google.com/app/apikey{% endif %}"
+                 autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Modell</label>
+          <input class="form-input" name="gemini_model" value="{{ cfg.gemini_model }}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Ollama section ─────────────────────────────────────── #}
+  <div class="panel" id="section-ollama" style="margin-top: 16px;">
+    <div class="panel-header">
+      <div class="panel-title">Ollama</div>
+    </div>
+    <div class="panel-body">
+      <div class="form-grid">
+        <div class="form-group" style="grid-column: span 2;">
+          <label class="form-label">URL</label>
+          <input class="form-input" name="ollama_url" value="{{ cfg.ollama_url }}"
+                 placeholder="http://192.168.1.X:11434">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Modell</label>
+          <input class="form-input" name="ollama_model" value="{{ cfg.ollama_model }}"
+                 placeholder="qwen2.5:7b">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Timeout (mp)</label>
+          <input class="form-input" type="number" name="ollama_timeout_sec"
+                 value="{{ cfg.ollama_timeout_sec }}" min="5" max="600">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── LM Studio section ──────────────────────────────────── #}
+  <div class="panel" id="section-lm_studio" style="margin-top: 16px;">
+    <div class="panel-header">
+      <div class="panel-title">LM Studio</div>
+    </div>
+    <div class="panel-body">
+      <div class="form-grid">
+        <div class="form-group" style="grid-column: span 2;">
+          <label class="form-label">URL</label>
+          <input class="form-input" name="lm_studio_url" value="{{ cfg.lm_studio_url }}"
+                 placeholder="http://192.168.1.X:1234/v1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Modell</label>
+          <input class="form-input" name="lm_studio_model" value="{{ cfg.lm_studio_model }}"
+                 placeholder="gemma-4-e4b">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Timeout (mp)</label>
+          <input class="form-input" type="number" name="lm_studio_timeout_sec"
+                 value="{{ cfg.lm_studio_timeout_sec }}" min="5" max="600">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 24px; display: flex; gap: 10px; align-items: center;">
+    <button type="submit" class="btn btn-primary">Mentés</button>
+    <button type="submit" class="btn" formaction="/admin/ai-config/test">Teszt</button>
+    <span style="font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle);">
+      A teszt egy minta árajánlat-kérő emailen futtatja az aktuális provider-t.
+    </span>
+  </div>
+</form>
+
+<script>
+function updateSections() {
+  const provider = document.querySelector('input[name="provider"]:checked').value;
+  ['gemini', 'ollama', 'lm_studio'].forEach(p => {
+    const el = document.getElementById('section-' + p);
+    if (el) el.style.display = (provider === p) ? '' : 'none';
+  });
+}
+updateSections();
+</script>
+{% endblock %}

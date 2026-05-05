@@ -15,8 +15,9 @@ import logging
 import urllib.error
 import urllib.request
 
+from sqlalchemy.orm import Session
+
 from app.modules.jobs.email_models import IncomingEmail
-from app.shared.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -82,16 +83,18 @@ def _strip_code_fence(text: str) -> str:
     return s.strip()
 
 
-def classify_with_lm_studio(email: IncomingEmail):
+def classify_with_lm_studio(db: Session, email: IncomingEmail):
     """Email osztályozása LM Studio-val.
 
     Visszaad egy ClassificationResult-ot, vagy None-t ha hiba van
     (a classifier ekkor RULE_FALLBACK / OTHER-re esik).
     """
+    from app.modules.jobs.ai_settings import get_ai_config
     from app.modules.jobs.email_classifier import ClassificationResult
     from app.modules.jobs.email_models import ClassifiedBy, EmailCategory
 
-    if not settings.lm_studio_url:
+    cfg = get_ai_config(db)
+    if not cfg.lm_studio_url:
         return None
 
     subject = email.subject or "(nincs tárgy)"
@@ -101,7 +104,7 @@ def classify_with_lm_studio(email: IncomingEmail):
     user_prompt = f"Feladó: {from_info}\nTárgy: {subject}\n\n{body}"
 
     chat_body = {
-        "model": settings.lm_studio_model,
+        "model": cfg.lm_studio_model,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
@@ -113,8 +116,8 @@ def classify_with_lm_studio(email: IncomingEmail):
         "response_format": {"type": "json_object"},
     }
 
-    url = settings.lm_studio_url.rstrip("/") + "/chat/completions"
-    data = _post_chat(url, chat_body, settings.lm_studio_timeout_sec)
+    url = cfg.lm_studio_url.rstrip("/") + "/chat/completions"
+    data = _post_chat(url, chat_body, cfg.lm_studio_timeout_sec)
     if data is None:
         return None
 

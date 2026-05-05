@@ -4,8 +4,9 @@ Egy rövid prompt-ot küld a Gemini API-nak:
   - Email tárgy + body (max 3000 karakter)
   - Strukturált JSON válasz: category, confidence, summary
 
-A modul lazy-init-et használ: ha nincs GEMINI_API_KEY,
-nem importálja a google.genai SDK-t, és None-t ad vissza.
+Cache: a Gemini klienseket api_key kulcsú dict-ben tartjuk. Az admin
+UI-ról szerkeszthető API key változhat runtime-ban — az új keyhez új
+kliens jön létre, a régiek a memóriában maradnak (kicsi overhead).
 """
 
 from __future__ import annotations
@@ -13,14 +14,15 @@ from __future__ import annotations
 import json
 import logging
 
+from sqlalchemy.orm import Session
+
 from app.modules.jobs.email_models import IncomingEmail
-from app.shared.config import settings
 
 log = logging.getLogger(__name__)
 
-# Lazy-init: egyszer hozzuk létre a klienst
-_client = None
-_init_attempted = False
+# api_key → genai.Client cache. A runtime-ban változó kulcshoz új
+# kliens kreálódik, a régiek itt maradnak.
+_clients: dict[str, object] = {}
 
 # A prompt megmondja a Gemini-nek hogy nyomdai cég emailjeit kell osztályozni
 _SYSTEM_PROMPT = """\
@@ -49,39 +51,36 @@ Válaszolj KIZÁRÓLAG az alábbi JSON formátumban (semmi más szöveg):
 """
 
 
-def _get_client():
-    """Lazy Gemini kliens inicializálás."""
-    global _client, _init_attempted  # noqa: PLW0603
-    if _init_attempted:
-        return _client
-    _init_attempted = True
-
-    api_key = settings.gemini_api_key
+def _get_client(api_key: str):
+    """Gemini kliens api_key-re cache-elve. None ha nincs key vagy SDK hiányzik."""
     if not api_key:
-        log.warning("GEMINI_API_KEY nincs beállítva — email-osztályozás Gemini nélkül fut.")
         return None
+    if api_key in _clients:
+        return _clients[api_key]
 
     try:
         from google import genai
 
-        _client = genai.Client(api_key=api_key)
-        log.info("Gemini kliens inicializálva (model: %s)", settings.gemini_model)
+        client = genai.Client(api_key=api_key)
+        _clients[api_key] = client
+        log.info("Gemini kliens inicializálva")
+        return client
     except Exception:
         log.exception("Gemini kliens inicializálás sikertelen")
-        _client = None
-
-    return _client
+        return None
 
 
-def classify_with_gemini(email: IncomingEmail):
+def classify_with_gemini(db: Session, email: IncomingEmail):
     """Email osztályozása Gemini flash-sel.
 
     Visszaad egy ClassificationResult-ot, vagy None-t ha hiba van.
     """
+    from app.modules.jobs.ai_settings import get_ai_config
     from app.modules.jobs.email_classifier import ClassificationResult
     from app.modules.jobs.email_models import ClassifiedBy, EmailCategory
 
-    client = _get_client()
+    cfg = get_ai_config(db)
+    client = _get_client(cfg.gemini_api_key)
     if client is None:
         return None
 
@@ -99,7 +98,7 @@ Tárgy: {subject}
 
     try:
         response = client.models.generate_content(
-            model=settings.gemini_model,
+            model=cfg.gemini_model,
             contents=user_prompt,
             config={
                 "system_instruction": _SYSTEM_PROMPT,

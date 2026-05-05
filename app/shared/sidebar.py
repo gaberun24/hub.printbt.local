@@ -36,6 +36,7 @@ _ICON_INVITE = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="curren
 _ICON_TAG = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>'
 _ICON_CATALOG = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>'
 _ICON_SHIELD = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+_ICON_BRAIN = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.5 2A2.5 2.5 0 007 4.5v15A2.5 2.5 0 009.5 22h5a2.5 2.5 0 002.5-2.5v-15A2.5 2.5 0 0014.5 2h-5z"/><path d="M7 8h10"/><path d="M7 12h10"/><path d="M7 16h10"/></svg>'
 
 
 @dataclass(frozen=True)
@@ -207,6 +208,13 @@ NAV_SECTIONS: tuple[NavSection, ...] = (
                 visible=lambda u: u.is_admin,
                 badge_key="quarantine_bad",
                 urgent=True,  # vermilion badge ha van fertőzött/hibás
+            ),
+            NavItem(
+                key="admin_ai_config",
+                label="AI beállítások",
+                href="/admin/ai-config",
+                icon=_ICON_BRAIN,
+                visible=lambda u: u.is_admin,
             ),
         ),
     ),

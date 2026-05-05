@@ -424,6 +424,127 @@ def _base_url(request: FastAPIRequest) -> str:
     return f"{request.url.scheme}://{request.url.netloc}"
 
 
+# ───────────────────────── AI provider config ─────────────────────────
+
+
+@router.get("/ai-config", response_class=HTMLResponse)
+def ai_config_form(
+    request: FastAPIRequest,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    test_result: str | None = None,
+    test_ok: bool = False,
+) -> HTMLResponse:
+    """AI provider runtime config — itt szerkeszthető a system_settings táblában tárolt
+    érték (titkosított API kulcsokkal). A `.env` továbbra is fallback."""
+    from app.modules.jobs.ai_settings import get_ai_config
+
+    cfg = get_ai_config(db)
+    return templates.TemplateResponse(
+        request,
+        "admin/ai_config.html",
+        {
+            "user": user,
+            "title": "AI beállítások",
+            "topbar_title": "AI beállítások",
+            "topbar_subtitle": "email osztályozás provider választás",
+            "cfg": cfg,
+            "has_gemini_key": bool(cfg.gemini_api_key),
+            "test_result": test_result,
+            "test_ok": test_ok,
+            **sidebar_context(db, user, active_key="admin_ai_config"),
+        },
+    )
+
+
+@router.post("/ai-config")
+def ai_config_save(
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    provider: str = Form("none"),
+    gemini_api_key: str = Form(""),
+    gemini_model: str = Form("gemini-2.5-flash"),
+    ollama_url: str = Form(""),
+    ollama_model: str = Form("qwen2.5:7b"),
+    ollama_timeout_sec: int = Form(60),
+    lm_studio_url: str = Form(""),
+    lm_studio_model: str = Form("gemma-4-e4b"),
+    lm_studio_timeout_sec: int = Form(60),
+) -> Response:
+    """AI config mentés. Az API kulcs csak akkor íródik felül, ha új érték van —
+    üres mező = változatlan (mint az IMAP fióknál)."""
+    from app.modules.jobs.ai_settings import set_setting
+
+    if provider not in ("none", "gemini", "ollama", "lm_studio"):
+        provider = "none"
+
+    set_setting(db, "ai.provider", provider, user_id=user.id)
+    if gemini_api_key.strip():
+        set_setting(db, "ai.gemini_api_key", gemini_api_key.strip(), user_id=user.id)
+    set_setting(db, "ai.gemini_model", gemini_model.strip(), user_id=user.id)
+    set_setting(db, "ai.ollama_url", ollama_url.strip(), user_id=user.id)
+    set_setting(db, "ai.ollama_model", ollama_model.strip(), user_id=user.id)
+    set_setting(db, "ai.ollama_timeout_sec", str(max(5, ollama_timeout_sec)), user_id=user.id)
+    set_setting(db, "ai.lm_studio_url", lm_studio_url.strip(), user_id=user.id)
+    set_setting(db, "ai.lm_studio_model", lm_studio_model.strip(), user_id=user.id)
+    set_setting(db, "ai.lm_studio_timeout_sec", str(max(5, lm_studio_timeout_sec)), user_id=user.id)
+    db.commit()
+
+    return RedirectResponse(url="/admin/ai-config", status_code=303)
+
+
+@router.post("/ai-config/test")
+def ai_config_test(
+    request: FastAPIRequest,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """Az aktuális AI provider tesztelése egy szintetikus emailen."""
+    from app.modules.jobs.ai_settings import get_ai_config
+    from app.modules.jobs.email_classifier import _classify_with_ai
+    from app.modules.jobs.email_models import IncomingEmail
+
+    # Szintetikus minta-email — nem mentjük DB-be, csak lefuttatjuk rajta a classifier-t
+    sample = IncomingEmail(
+        id=0,
+        account_id=0,
+        from_address="teszt@example.com",
+        from_name="Teszt Elek",
+        subject="Árajánlat kérés — UV nyomtatás",
+        body_text=(
+            "Sziasztok, érdeklődnék hogy mennyibe kerülne 200 db névjegykártya "
+            "UV-vel, kétoldalas, 350g matt papír. Köszönöm!"
+        ),
+    )
+
+    cfg = get_ai_config(db)
+    if cfg.provider == "none":
+        result_text = "Nincs aktív AI provider — válassz egyet, mentsd, és próbáld újra."
+        ok = False
+    else:
+        try:
+            result = _classify_with_ai(db, sample)
+            if result is None:
+                result_text = (
+                    f"A {cfg.provider} provider nem válaszolt — ellenőrizd az URL-t "
+                    "és a hálózati elérést."
+                )
+                ok = False
+            else:
+                result_text = (
+                    f"✓ {cfg.provider} működik. Kategória: {result.category} "
+                    f"({result.confidence * 100:.0f}%)"
+                )
+                if result.summary:
+                    result_text += f"\nÖsszefoglaló: {result.summary}"
+                ok = True
+        except Exception as exc:
+            result_text = f"Hiba: {exc}"
+            ok = False
+
+    return ai_config_form(request, user, db, test_result=result_text, test_ok=ok)
+
+
 # ───────────────────────── quarantine (vírus-szkennelés) ─────────────────────────
 
 
