@@ -1,0 +1,39 @@
+{# Autocomplete suggestion list a /items/search endpointhoz.
+   A user a title input-ba gépel; 200ms után GET-eli, és ezt swap-eli
+   az adott sor .line-suggestions div innerHTML-jébe.
+
+   Kattintás → JS (rendelo_autocomplete.js) tölti ki a form mezőket az
+   adat-attribútumok alapján.
+#}
+{% if items %}
+  <div class="item-suggestions" role="listbox">
+    {% for it in items %}
+      <button type="button"
+              class="item-suggestion"
+              role="option"
+              data-item-id="{{ it.id }}"
+              data-item-name="{{ it.name }}"
+              data-item-brand="{{ it.brand or '' }}"
+              data-item-code="{{ it.code or '' }}"
+              data-item-category-id="{{ it.category_id }}"
+              data-item-default-unit="{{ it.default_unit }}">
+        <div class="item-suggestion-main">
+          {% if it.brand %}<span class="item-brand">{{ it.brand }}</span> {% endif %}
+          <strong>{{ it.name }}</strong>
+          {% if it.code %}<span class="item-code" style="font-family: var(--font-mono);">{{ it.code }}</span>{% endif %}
+        </div>
+        <div class="item-suggestion-meta" style="font-size: 11px; color: var(--ink-subtle);">
+          <span class="dot" aria-hidden="true" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: {{ it.category.color }}; vertical-align: middle;"></span>
+          {{ it.category.name }}
+          {% if it.sizes %} · <span style="font-family: var(--font-mono);">{{ it.sizes }}</span>{% endif %}
+          {% if it.description %} · <em>{{ it.description }}</em>{% endif %}
+        </div>
+      </button>
+    {% endfor %}
+  </div>
+{% elif query and query|length >= 2 %}
+  <div class="item-suggestions-empty" style="padding: 8px 12px; color: var(--ink-subtle); font-size: 12px;">
+    Nincs találat — a katalógusban még nincs ilyen tétel. Megadhatod szabadon, vagy
+    az admin tudja felvenni.
+  </div>
+{% endif %}

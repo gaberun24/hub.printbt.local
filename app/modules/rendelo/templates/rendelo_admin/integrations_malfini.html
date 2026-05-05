@@ -1,0 +1,170 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/admin/rendelo/items" class="btn">Tételek</a>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Integráció — <em>Malfini B2B</em></h1>
+<div class="greeting-date">Stock-szinkron a Malfini B2B API-ról</div>
+
+{% if flash_msg %}
+  <div class="panel" style="margin-top: 16px; padding: 12px 18px; border-left: 3px solid var(--success);">
+    <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 4px;">
+      OK
+    </div>
+    <div style="white-space: pre-wrap;">{{ flash_msg }}</div>
+  </div>
+{% endif %}
+{% if flash_err %}
+  <div class="panel" style="margin-top: 16px; padding: 12px 18px; border-left: 3px solid var(--accent);">
+    <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 4px;">
+      Hiba
+    </div>
+    <div style="white-space: pre-wrap;">{{ flash_err }}</div>
+  </div>
+{% endif %}
+
+<div class="panel" style="max-width: 760px; margin-top: 24px;">
+  <div class="panel-header">
+    <div class="panel-title">Belépési adatok</div>
+  </div>
+  <div class="panel-body">
+    <p style="color: var(--ink-subtle); font-size: 12px; margin: -4px 0 14px;">
+      A Malfini B2B fiók (b2b.malfini.com partner-account) felhasználóneve és jelszava.
+      A jelszó Fernet-tel titkosítva tárolódik az adatbázisban
+      (a SECRET_KEY-ből származtatott kulccsal).
+    </p>
+
+    <form method="post" action="/admin/integrations/malfini">
+      <div class="form-group">
+        <label class="form-label" for="username">Felhasználónév</label>
+        <input class="form-input" type="text" id="username" name="username"
+               value="{{ username }}" autocomplete="off"
+               placeholder="pl. nyomda@printbt.hu">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password">
+          Jelszó
+          {% if has_password %}
+            <span style="color: var(--ink-subtle); font-weight: 400; font-size: 11px;">— van mentett, üresen hagyva változatlan marad</span>
+          {% endif %}
+        </label>
+        <input class="form-input" type="password" id="password" name="password"
+               value="" autocomplete="new-password"
+               placeholder="{{ '••••••••• (mentve)' if has_password else 'add meg a jelszót' }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="base_url">API alap-URL</label>
+        <input class="form-input" type="text" id="base_url" name="base_url"
+               value="{{ base_url }}" placeholder="{{ default_base_url }}">
+        <small style="color: var(--ink-subtle); font-size: 11px; font-family: var(--font-mono);">
+          Default: {{ default_base_url }}. Csak akkor írd át ha a Malfini máshova rakta.
+        </small>
+      </div>
+
+      <div style="margin-top: 18px;">
+        <button type="submit" class="btn btn-accent">Mentés</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="panel" style="max-width: 760px; margin-top: 16px;">
+  <div class="panel-header">
+    <div class="panel-title">Műveletek</div>
+  </div>
+  <div class="panel-body">
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+      <form method="post" action="/admin/integrations/malfini/test" style="display: inline;">
+        <button type="submit" class="btn"
+                {% if not has_password %}disabled title="Először mentsd el a jelszót"{% endif %}>
+          Login-teszt
+        </button>
+      </form>
+
+      <form method="post" action="/admin/integrations/malfini/refresh" style="display: inline;">
+        <button type="submit" class="btn"
+                {% if not has_password %}disabled title="Először mentsd el a jelszót"{% endif %}>
+          Stock szinkron most
+        </button>
+      </form>
+
+      <form method="post" action="/admin/integrations/malfini/debug" style="display: inline;">
+        <button type="submit" class="btn"
+                {% if not has_password %}disabled title="Először mentsd el a jelszót"{% endif %}>
+          Debug — raw válasz
+        </button>
+      </form>
+
+      <form method="post" action="/admin/integrations/malfini/clear" style="display: inline;"
+            onsubmit="return confirm('Biztosan törlöd a mentett credential-eket? A timer ezután kihagyja a futást, amíg újra be nem állítod.');">
+        <button type="submit" class="btn">Töröl mindent</button>
+      </form>
+    </div>
+
+    <p style="color: var(--ink-subtle); font-size: 11px; margin-top: 12px; line-height: 1.5;">
+      A login-teszt csak ellenőrzi hogy a credential jó — semmilyen adatot nem
+      módosít. A stock-szinkron a teljes Malfini katalógus készletét lehúzza
+      (általában 5–30 mp), és frissíti az <span style="font-family: var(--font-mono);">Item.stock_qty</span>-t.
+    </p>
+  </div>
+</div>
+
+<div class="panel" style="max-width: 760px; margin-top: 16px;">
+  <div class="panel-header">
+    <div class="panel-title">Állapot</div>
+  </div>
+  <div class="panel-body">
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+      <tbody>
+        <tr>
+          <td style="width: 200px; color: var(--ink-subtle); padding: 6px 0;">Utolsó sikeres login:</td>
+          <td style="padding: 6px 0;">
+            {% if last_login_ok_at %}
+              <span style="font-family: var(--font-mono);">{{ last_login_ok_at }}</span>
+            {% else %}
+              <span style="color: var(--ink-subtle);">— soha</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="color: var(--ink-subtle); padding: 6px 0;">Utolsó login-hiba:</td>
+          <td style="padding: 6px 0;">
+            {% if last_login_error %}
+              <span style="color: var(--accent);">{{ last_login_error }}</span>
+            {% else %}
+              <span style="color: var(--ink-subtle);">— nincs</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="color: var(--ink-subtle); padding: 6px 0;">Utolsó stock-szinkron:</td>
+          <td style="padding: 6px 0;">
+            {% if last_refresh_at %}
+              <span style="font-family: var(--font-mono);">{{ last_refresh_at }}</span>
+            {% else %}
+              <span style="color: var(--ink-subtle);">— soha</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="color: var(--ink-subtle); padding: 6px 0;">Szinkron státusza:</td>
+          <td style="padding: 6px 0;">
+            {% if last_refresh_status %}
+              {{ last_refresh_status }}
+            {% else %}
+              <span style="color: var(--ink-subtle);">—</span>
+            {% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="color: var(--ink-subtle); font-size: 11px; margin-top: 12px; font-family: var(--font-mono);">
+      CLI: <code>hub refresh-malfini-stock</code> · admin UI gombbal vagy systemd timerrel hívható.
+    </p>
+  </div>
+</div>
+
+{% endblock %}

@@ -278,6 +278,79 @@ def cmd_reclassify_emails(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import_malfini_pricelist(args: argparse.Namespace) -> int:
+    """Malfini Standard Pricelist CSV → variant-szintű katalógus."""
+    init_db()
+
+    from app.modules.rendelo.malfini_csv import import_pricelist_csv
+
+    print(f"CSV: {args.csv_path}")
+    print(
+        f"Mód:           {'minden sor (~14,800)' if args.all else 'csak essential modellek (~2,054)'}"
+    )
+    print(
+        f"Régi tételek:  {'INACTIVE-ra állítjuk' if not args.keep_old else 'változatlanul hagyjuk'}"
+    )
+    if args.dry_run:
+        print("DRY-RUN — nem commit-olunk")
+    print()
+
+    with SessionLocal() as db:
+        try:
+            stats = import_pricelist_csv(
+                db,
+                args.csv_path,
+                only_essential=not args.all,
+                deactivate_missing=not args.keep_old,
+                dry_run=args.dry_run,
+            )
+        except ValueError as e:
+            print(f"HIBA: {e}", file=sys.stderr)
+            return 1
+
+    label = "DRY-RUN" if args.dry_run else "Mentve"
+    print(f"[{label}]")
+    print(f"  CSV sor:           {stats.rows_seen:>6}")
+    print(f"  Új Item:           {stats.added:>6}")
+    print(f"  Frissítve:         {stats.updated:>6}")
+    print(f"  Kihagyva (filter): {stats.skipped_filter:>6}")
+    print(f"  Kihagyva (üres):   {stats.skipped_invalid:>6}")
+    print(f"  Inactive-ra állva: {stats.deactivated:>6} (CSV-ben nem szerepel, régi)")
+    if stats.by_category:
+        print()
+        print("Kategóriánként:")
+        for cat, n in stats.by_category.most_common():
+            print(f"  {cat:<20} {n:>6}")
+    return 0
+
+
+def cmd_refresh_malfini_stock(_args: argparse.Namespace) -> int:
+    """Malfini B2B API → Item.stock_qty refresh.
+
+    A credential-ek a `system_settings` táblában élnek (admin UI-n állítható).
+    Ha nincs configolva, error kód és üzenet — nem fail-eli a systemd
+    timer-t (egy nem-konfigurált rendszeren ne essen állandóan).
+    """
+    init_db()
+
+    from app.modules.rendelo.malfini_stock import refresh_all_stocks
+
+    with SessionLocal() as db:
+        result = refresh_all_stocks(db)
+    print(result.message)
+    if result.ok:
+        print(f"  Tétel összesen:    {result.items_total}")
+        print(f"  Frissítve:         {result.items_updated}")
+        print(f"  API-tól érkezett:  {result.api_returned}")
+        print(f"  0-ra állítva:      {result.items_zeroed}")
+    # Csak a "nincs configurálva" eset → exit 0 (nem hiba systemd szempontból)
+    if not result.ok:
+        if "Nincs Malfini B2B credential" in result.message:
+            return 0
+        return 1
+    return 0
+
+
 def cmd_generate_invite(args: argparse.Namespace) -> int:
     init_db()
     flags = _parse_roles(args.roles)
@@ -380,6 +453,38 @@ def main() -> int:
         help="Max ennyi email-en futtatja (a legfrissebbektől)",
     )
     p_reclass.set_defaults(func=cmd_reclassify_emails)
+
+    p_pricelist = sub.add_parser(
+        "import-malfini-pricelist",
+        help="Malfini Standard Pricelist CSV import — variant-szintű (méret+szín+kód) Item-ek",
+    )
+    p_pricelist.add_argument(
+        "csv_path",
+        help="A Malfini Standard Pricelist CSV-fájl elérési útja",
+    )
+    p_pricelist.add_argument(
+        "--all",
+        action="store_true",
+        help="MINDEN CSV sort importál (~14,800). Default: csak az essential 26 modell (~2,054).",
+    )
+    p_pricelist.add_argument(
+        "--keep-old",
+        action="store_true",
+        help="A meglévő Malfini Item-eket változatlanul hagyja. "
+        "Default: a CSV-ben nem szereplő régiek inactive-ra mennek.",
+    )
+    p_pricelist.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Nem commit-ol, csak számol",
+    )
+    p_pricelist.set_defaults(func=cmd_import_malfini_pricelist)
+
+    p_stock = sub.add_parser(
+        "refresh-malfini-stock",
+        help="Malfini B2B → Item.stock_qty szinkronizáció (systemd timer hívja)",
+    )
+    p_stock.set_defaults(func=cmd_refresh_malfini_stock)
 
     args = parser.parse_args()
     return args.func(args)

@@ -15,6 +15,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.modules.jobs.routes import views as jobs_views
 from app.modules.rendelo.routes import admin as rendelo_admin
+from app.modules.rendelo.routes import integrations as rendelo_integrations
+from app.modules.rendelo.routes import items as rendelo_items
+from app.modules.rendelo.routes import notify as rendelo_notify
 from app.modules.rendelo.routes import views as rendelo_views
 from app.routes import admin, auth, customers, profile, sheet, views
 from app.shared.config import ensure_dirs, settings
@@ -51,6 +54,9 @@ app.include_router(profile.router)
 # különben pl. `/admin/rendelo/categories` `/{request_id}` alá esne 404-gyel.
 app.include_router(admin.router)
 app.include_router(rendelo_admin.router)
+app.include_router(rendelo_integrations.router)
+app.include_router(rendelo_items.router)
+app.include_router(rendelo_notify.router)
 app.include_router(rendelo_views.router)
 # Customers (globális) és Munkák modul (statikus /jobs/new ELŐBB,
 # dinamikus /jobs/{public_id} a routerön belül utána).

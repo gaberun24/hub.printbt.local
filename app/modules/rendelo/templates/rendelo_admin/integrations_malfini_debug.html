@@ -1,0 +1,30 @@
+{% extends "app.html" %}
+
+{% block topbar_action %}
+  <a href="/admin/integrations/malfini" class="btn">Vissza</a>
+{% endblock %}
+
+{% block main %}
+<h1 class="greeting" style="margin-bottom: 4px;">Malfini API <em>debug</em></h1>
+<div class="greeting-date">
+  Raw válasz a <span style="font-family: var(--font-mono);">{{ base_url }}/product/availabilities</span> végpontról
+</div>
+
+<div class="panel" style="max-width: 960px; margin-top: 24px;">
+  <div class="panel-header">
+    <div class="panel-title">
+      HTTP {{ status_code }} · body méret (max 3 KB-ig vágva): {{ body_length }} byte
+    </div>
+  </div>
+  <div class="panel-body">
+    <pre style="background: var(--paper-soft, #f5f3ee); padding: 14px; border-radius: 6px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.45; overflow: auto; max-height: 600px; white-space: pre-wrap; word-break: break-all;">{{ body_sample }}</pre>
+
+    <p style="color: var(--ink-subtle); font-size: 11.5px; margin-top: 14px;">
+      Az első ~3 KB-os részlet alapján beállítható, hogy a parser milyen
+      JSON-kulcsokat keressen. Ha látható a kód-mező és a darabszám-mező
+      neve, az alapján könnyen finomítható.
+    </p>
+  </div>
+</div>
+
+{% endblock %}
