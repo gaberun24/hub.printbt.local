@@ -159,6 +159,11 @@ def _classify_with_ai(email: IncomingEmail) -> ClassificationResult | None:
 
         return classify_with_gemini(email)
 
+    if provider == "ollama":
+        from app.modules.jobs.ollama_client import classify_with_ollama
+
+        return classify_with_ollama(email)
+
     if provider == "lm_studio":
         from app.modules.jobs.lm_studio_client import classify_with_lm_studio
 

@@ -48,6 +48,7 @@ class ClassifiedBy(StrEnum):
     RULE_SPAM = "rule_spam"  # Python: spam pattern (unsubscribe, stb.)
     RULE_FALLBACK = "rule_fallback"  # Default OTHER, ha AI nem elérhető
     GEMINI = "gemini"  # Google Gemini Flash API (felhő)
+    OLLAMA = "ollama"  # Helyi Ollama (céges gépen futó)
     LM_STUDIO = "lm_studio"  # Helyi LM Studio (OpenAI-kompatibilis)
     MANUAL = "manual"  # User kézi átsorolás
 

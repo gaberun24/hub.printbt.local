@@ -34,7 +34,8 @@ class Settings(BaseSettings):
 
     # AI provider választás az email osztályozáshoz.
     #   gemini    — Google Gemini Flash API (felhő, gyors, ingyenes tier-rel)
-    #   lm_studio — Helyi LM Studio (OpenAI-kompatibilis, privát, lassabb)
+    #   ollama    — Helyi Ollama (céges gépen futó, OLLAMA_HOST=0.0.0.0:11434)
+    #   lm_studio — Helyi LM Studio (OpenAI-kompatibilis)
     #   none      — Nincs AI, fallback OTHER kategória mindenre
     ai_provider: str = "none"
 
@@ -42,10 +43,15 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
 
+    # Ollama (ha ai_provider=ollama)
+    # Pl. http://192.168.1.123:11434 — egy céges gépen futó Ollama szerver,
+    # ami JSON-mode-dal pontos kategóriát ad vissza. A szervert a klienst
+    # futtató gépen az OLLAMA_HOST=0.0.0.0:11434 env var teszi LAN-elérhetővé.
+    ollama_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen2.5:7b"
+    ollama_timeout_sec: int = 60
+
     # LM Studio (ha ai_provider=lm_studio)
-    # Pl. http://192.168.1.123:1234/v1 — a user gépén futó LM Studio OpenAI
-    # endpoint-ja. A szerver módot az LM Studio Local Server tab kapcsolja be,
-    # és "Listen on all network interfaces" opcióval érhető el a LAN-ról.
     lm_studio_url: str = "http://127.0.0.1:1234/v1"
     lm_studio_model: str = "gemma-4-e4b"
     lm_studio_timeout_sec: int = 60
