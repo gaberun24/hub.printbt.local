@@ -134,7 +134,10 @@ def customers_new_submit(
             status_code=303,
         )
 
+    from app.modules.jobs.public_id import generate_unique_for
+
     customer = Customer(
+        public_id=generate_unique_for(db, Customer),
         name=name,
         email=(email or "").strip().lower() or None,
         phone=(phone or "").strip() or None,

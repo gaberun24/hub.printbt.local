@@ -52,7 +52,7 @@ def format_display(public_id: str) -> str:
 
 
 def generate_unique(db: Session, length: int = DEFAULT_LENGTH) -> str:
-    """Egyedi public ID-t generál, ütközés-retry-jal.
+    """Egyedi Job public_id, ütközés-retry-jal.
 
     Ha az adott `length`-en `MAX_RETRY_AT_LENGTH` próbálkozás után sem
     talál szabadot, +1 karakterre hosszabbít és újra próbál.
@@ -62,14 +62,34 @@ def generate_unique(db: Session, length: int = DEFAULT_LENGTH) -> str:
     """
     from app.modules.jobs.models import Job
 
+    return _generate_unique_for(db, Job, "public_id", length)
+
+
+def generate_unique_for(
+    db: Session, model_class, column_name: str = "public_id", length: int = DEFAULT_LENGTH
+) -> str:
+    """Generic egyedi public ID. Tetszőleges modell-osztálynak +
+    oszlop-névnek (default `public_id`).
+
+    Pl. Customer:
+        from app.shared.models import Customer
+        cid = generate_unique_for(db, Customer)
+    """
+    return _generate_unique_for(db, model_class, column_name, length)
+
+
+def _generate_unique_for(db: Session, model_class, column_name: str, length: int) -> str:
+    column = getattr(model_class, column_name)
     while length <= MAX_LENGTH:
         for _ in range(MAX_RETRY_AT_LENGTH):
             candidate = generate_random(length)
             existing = db.execute(
-                select(Job.id).where(Job.public_id == candidate)
+                select(model_class.id).where(column == candidate)
             ).scalar_one_or_none()
             if existing is None:
                 return candidate
-        # Az adott length-en ütközés volt — bővítjük a teret +1 karakterrel
         length += 1
-    raise RuntimeError(f"Public ID generálás sikertelen: {MAX_LENGTH} karakteren is ütközés volt.")
+    raise RuntimeError(
+        f"{model_class.__name__}.{column_name} generálás sikertelen: "
+        f"{MAX_LENGTH} karakteren is ütközés volt."
+    )

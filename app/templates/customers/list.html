@@ -35,6 +35,7 @@
       <table style="width:100%; border-collapse: collapse;">
         <thead>
           <tr style="background: var(--surface-2); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted);">
+            <th style="text-align:left; padding: 10px 16px;">Azonosító</th>
             <th style="text-align:left; padding: 10px 16px;">Név</th>
             <th style="text-align:left; padding: 10px 16px;">Forma · Típus</th>
             <th style="text-align:left; padding: 10px 16px;">Adószám</th>
@@ -47,6 +48,9 @@
           {% for c in customers %}
             <tr style="border-bottom: 1px solid var(--border); cursor: pointer;"
                 onclick="window.location='/customers/{{ c.id }}'">
+              <td style="padding: 10px 16px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: var(--ink);">
+                {{ c.public_id|public_id_format if c.public_id else "—" }}
+              </td>
               <td style="padding: 10px 16px;">
                 <div style="font-weight: 600;">{{ c.name }}</div>
                 {% if c.notes %}

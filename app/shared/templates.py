@@ -277,6 +277,19 @@ def _email_cat_hu(value: str) -> str:
     return _EMAIL_CAT_LABELS.get(str(value), str(value))
 
 
+def _public_id_format(value: str | None) -> str:
+    """Public ID formázás: 6 karakter → `XXX-XXX` (kötőjellel a 3. után).
+
+    Használat: `{{ job.public_id|public_id_format }}` vagy `{{ customer.public_id|public_id_format }}`.
+    """
+    if not value:
+        return ""
+    s = "".join(c for c in value.upper() if c.isalnum())
+    if len(s) <= 3:
+        return s
+    return f"{s[:3]}-{s[3:]}"
+
+
 templates.env.globals["now"] = _now
 templates.env.filters["has_flag"] = _has_flag
 templates.env.filters["role_short"] = _role_short
@@ -284,3 +297,4 @@ templates.env.filters["job_type_hu"] = _job_type_hu
 templates.env.filters["task_type_hu"] = _task_type_hu
 templates.env.filters["task_type_icon"] = _task_type_icon
 templates.env.filters["email_cat_hu"] = _email_cat_hu
+templates.env.filters["public_id_format"] = _public_id_format

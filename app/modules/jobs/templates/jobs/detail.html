@@ -34,6 +34,9 @@
           </div>
           <div class="job-hero-customer">
             <a href="/customers/{{ job.customer.id }}" style="color: inherit;">{{ job.customer.name }}</a>
+            {% if job.customer.public_id %}
+              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--ink-muted); margin-left: 6px; letter-spacing: 0.04em;">{{ job.customer.public_id|public_id_format }}</span>
+            {% endif %}
             {% if job.customer.customer_type == 'reseller' %}
               <span class="reseller-badge" style="font-size:10px; vertical-align: middle;">VTL{% if job.customer.discount_pct %} · −{{ job.customer.discount_pct }}%{% endif %}</span>
             {% endif %}

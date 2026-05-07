@@ -27,7 +27,12 @@
       <div>
         <div class="sheet-id">{{ job.public_id[:3] }}-{{ job.public_id[3:] }}</div>
         <div class="sheet-customer-block">
-          <div class="sheet-customer">{{ job.customer.name }}</div>
+          <div class="sheet-customer">
+            {{ job.customer.name }}
+            {% if job.customer.public_id %}
+              <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--ink-muted); margin-left: 8px; letter-spacing: 0.04em;">{{ job.customer.public_id|public_id_format }}</span>
+            {% endif %}
+          </div>
           <div class="sheet-contact">
             {% if job.customer.phone %}{{ job.customer.phone }}{% endif %}
             {% if job.customer.phone and job.customer.email %} · {% endif %}

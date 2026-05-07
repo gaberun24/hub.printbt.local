@@ -177,6 +177,13 @@ class Customer(Base):
     __tablename__ = "customers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # 6-karakteres alfanumerikus ügyfél-azonosító (XXX-XXX formában megjelenítve).
+    # Regisztrációkor automatikusan generálódik, soha nem változik. A meglévő
+    # rekordok retroaktív backfill-jét az alembic migration intézi. NULL csak
+    # ütközés-edge case-ben (gyakorlatilag soha).
+    public_id: Mapped[str | None] = mapped_column(
+        String(8), unique=True, nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str | None] = mapped_column(String(190), index=True, nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
