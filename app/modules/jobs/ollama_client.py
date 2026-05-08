@@ -30,6 +30,20 @@ log = logging.getLogger(__name__)
 # kliensek között — lásd `app.modules.jobs.ai_settings`.
 
 
+def _strip_code_fence(text: str) -> str:
+    """Markdown ```json ... ``` block kicsomagolása.
+
+    Az Ollama cloud-modellek (pl. gemma4:31b-cloud) nem mindig tisztelik a
+    `format: "json"` paramétert, és code-fence-be csomagolják a JSON-t.
+    """
+    s = text.strip()
+    if s.startswith("```"):
+        s = s.split("\n", 1)[1] if "\n" in s else s[3:]
+        if s.endswith("```"):
+            s = s[:-3]
+    return s.strip()
+
+
 def _post_chat(url: str, body: dict, timeout: int) -> dict | None:
     """Ollama /api/chat hívás. None hibára (timeout / connection refused)."""
     data = json.dumps(body).encode("utf-8")
@@ -116,8 +130,12 @@ def classify_with_ollama(db: Session, email: IncomingEmail):
         )
         return None
 
+    # Cloud-modellek néha markdown code-fence-be csomagolják a JSON-t a
+    # format: "json" paraméter ellenére. Lecsupaszítjuk.
+    raw_clean = _strip_code_fence(raw)
+
     try:
-        parsed = json.loads(raw)
+        parsed = json.loads(raw_clean)
     except json.JSONDecodeError:
         log.warning("Ollama JSON-mode mégis nem-JSON-t adott: %.500s", raw)
         return None

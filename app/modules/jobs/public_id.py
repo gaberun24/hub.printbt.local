@@ -78,6 +78,44 @@ def generate_unique_for(
     return _generate_unique_for(db, model_class, column_name, length)
 
 
+# ─── Customer-specifikus generátor: 2 betű + 3 szám (XX###), kötőjel nélkül ───
+
+CUSTOMER_LETTERS = "ABCDEFGHJKMNPQRSTVWXYZ"  # nincs I/L/O/U
+CUSTOMER_DIGITS = "0123456789"
+CUSTOMER_LENGTH = 5  # 2 + 3
+# 22 betű * 22 betű * 1000 szám = 484 000 kombináció — bőven elég
+
+
+def generate_customer_public_id_random() -> str:
+    """5 karakteres customer ID: XX###. Pl. 'KM472'."""
+    letters = "".join(secrets.choice(CUSTOMER_LETTERS) for _ in range(2))
+    digits = "".join(secrets.choice(CUSTOMER_DIGITS) for _ in range(3))
+    return letters + digits
+
+
+def generate_unique_customer_public_id(db: Session) -> str:
+    """Egyedi 5-karakteres Customer public_id (XX###). Ütközés-retry-jal."""
+    from app.shared.models import Customer
+
+    for _ in range(50):
+        candidate = generate_customer_public_id_random()
+        existing = db.execute(
+            select(Customer.id).where(Customer.public_id == candidate)
+        ).scalar_one_or_none()
+        if existing is None:
+            return candidate
+    # 50 retry után — szinte soha nem érünk ide (484k kombináció a 2-betű-3-szám
+    # tartományban). Ha mégis: bedobunk egy 6 karakterest (XX####).
+    for _ in range(50):
+        candidate = generate_customer_public_id_random() + secrets.choice(CUSTOMER_DIGITS)
+        existing = db.execute(
+            select(Customer.id).where(Customer.public_id == candidate)
+        ).scalar_one_or_none()
+        if existing is None:
+            return candidate
+    raise RuntimeError("Customer public_id generálás sikertelen 100 próbával is.")
+
+
 def _generate_unique_for(db: Session, model_class, column_name: str, length: int) -> str:
     column = getattr(model_class, column_name)
     while length <= MAX_LENGTH:

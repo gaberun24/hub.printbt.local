@@ -49,7 +49,7 @@
             <tr style="border-bottom: 1px solid var(--border); cursor: pointer;"
                 onclick="window.location='/customers/{{ c.id }}'">
               <td style="padding: 10px 16px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: var(--ink);">
-                {{ c.public_id|public_id_format if c.public_id else "—" }}
+                {{ c.public_id if c.public_id else "—" }}
               </td>
               <td style="padding: 10px 16px;">
                 <div style="font-weight: 600;">{{ c.name }}</div>

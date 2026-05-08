@@ -18,13 +18,16 @@ down_revision: str | None = "9c4d2e7b8f1a"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# A public_id generálás karakterkészlete (vizuálisan zavaró 0/O/1/I/L/U kihagyva).
-ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ23456789"
-LENGTH = 6
+# Customer public_id formátum: 2 betű + 3 szám (XX###), kötőjel nélkül.
+# Pl. "KM472", "HB019". A vizuálisan zavaró I/L/O/U kihagyva.
+LETTERS = "ABCDEFGHJKMNPQRSTVWXYZ"
+DIGITS = "0123456789"
 
 
 def _gen() -> str:
-    return "".join(secrets.choice(ALPHABET) for _ in range(LENGTH))
+    letters = "".join(secrets.choice(LETTERS) for _ in range(2))
+    digits = "".join(secrets.choice(DIGITS) for _ in range(3))
+    return letters + digits
 
 
 def upgrade() -> None:
@@ -58,9 +61,9 @@ def upgrade() -> None:
                 candidate = c
                 break
         if candidate is None:
-            # Több karakter — gyakorlatilag soha nem érünk ide
+            # +1 számjegy ha kifutottunk az 5-karakteres térből
             for _ in range(50):
-                c = _gen() + secrets.choice(ALPHABET)
+                c = _gen() + secrets.choice(DIGITS)
                 if c not in used:
                     candidate = c
                     break

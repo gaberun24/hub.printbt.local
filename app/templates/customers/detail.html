@@ -14,7 +14,7 @@
       <div style="font-family: var(--font-mono); font-size:11px; color: var(--ink-subtle); letter-spacing:0.05em; margin-bottom: 4px;">
         ÜGYFÉL ·
         {% if customer.public_id %}
-          <span style="font-weight: 700; color: var(--ink); font-size: 13px; letter-spacing: 0.04em;">{{ customer.public_id|public_id_format }}</span>
+          <span style="font-weight: 700; color: var(--ink); font-size: 13px; letter-spacing: 0.04em;">{{ customer.public_id }}</span>
         {% else %}
           #{{ customer.id }}
         {% endif %}
