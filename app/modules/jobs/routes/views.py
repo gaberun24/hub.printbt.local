@@ -679,6 +679,17 @@ def _visible_accounts_list(db: Session, visible_account_ids: list[int]) -> list:
     )
 
 
+def _can_send_email(visible_accounts: list) -> bool:
+    """Tudunk-e küldeni emailt? Igen ha:
+    - A globális `.env` SMTP_HOST be van állítva, VAGY
+    - Bármelyik látható EmailAccount-on van saját SMTP konfiguráció.
+    A `send_email()` per-account override-okat fogad — ezt használjuk.
+    """
+    if settings.smtp_host:
+        return True
+    return any(getattr(acc, "smtp_host", None) for acc in visible_accounts)
+
+
 def _inbox_search_filter(q: str):
     """ILIKE keresés feladó, cím, tárgy és body-ban."""
     from app.modules.jobs.email_models import IncomingEmail
@@ -777,7 +788,7 @@ def jobs_inbox(
             "trash_count": trash_count,
             "active_tab": active_tab,
             "search_q": search_q,
-            "smtp_configured": bool(settings.smtp_host),
+            "smtp_configured": _can_send_email(_visible_accounts_list(db, visible_account_ids)),
             "visible_accounts": _visible_accounts_list(db, visible_account_ids),
             **sidebar_context(db, user, active_key="jobs_inbox"),
         },
@@ -890,7 +901,7 @@ def jobs_inbox_detail(
             "trash_count": trash_count,
             "active_tab": active_tab,
             "search_q": search_q,
-            "smtp_configured": bool(settings.smtp_host),
+            "smtp_configured": _can_send_email(_visible_accounts_list(db, visible_account_ids)),
             "visible_accounts": _visible_accounts_list(db, visible_account_ids),
             **sidebar_context(db, user, active_key="jobs_inbox"),
         },
