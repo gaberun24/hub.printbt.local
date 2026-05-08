@@ -192,6 +192,7 @@ visszahozzuk.
 | 2 | Munkák modul | ✅ kész | 0.3.0 |
 | 3 | A4 munkalap | ⏳ A4-PDF kész, Corel makró nem | 0.4.0 |
 | 4 | Email integráció | ✅ kész | 0.5.0 |
+| 4.1 | Customer public_id + Ollama cloud-fix | ✅ kész | 0.5.1 |
 | 5 | Árajánlat shared inbox | tervezett | 0.6.0 |
 | 6 | Készlet modul | tervezett | 0.7.0 |
 | 7 | Csiszolás | tervezett | 1.0.0 |

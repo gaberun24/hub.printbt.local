@@ -8,6 +8,32 @@ Verziózás: szemantikus, fázisokat követve (lásd [`ROADMAP.md`](ROADMAP.md))
 
 ---
 
+## [0.5.1] — 2026-05-08 — Customer azonosító + Ollama cloud-fix
+
+### Hozzáadva
+
+- **`Customer.public_id`** — egyedi 5-karakteres ügyfél-azonosító (XX###
+  formátum, 2 betű + 3 szám, kötőjel nélkül; pl. `KM472`). Regisztráláskor
+  automatikusan generálódik, az alembic migration retroaktív backfill-t ad
+  a meglévő ügyfeleknek.
+  - Megjelenítés: customer detail hero, customer list, Job detail
+    hero (név mellett mono+bold), A4 munkalap fejléc.
+  - Új helper: `generate_unique_customer_public_id()` — 50 retry után
+    +1 számjegy fallback (XX####).
+- **Generic public_id helper** — `generate_unique_for(db, model_class)`
+  a Job-os mintát általánosítja (Customer + jövőbeli rekordtípusokra).
+
+### Javítva
+
+- **Ollama code-fence stripping** — a cloud-modellek (pl.
+  `gemma4:31b-cloud`) néha NEM tisztelik a `format: "json"` paramétert
+  és markdown ```` ```json ```` blokkba csomagolják a választ. A parser
+  most levágja a code-fence-t, mint az LM Studio kliens (eddig az
+  Ollama-os JSON-mode garantált válaszra építettünk — ez cloud-on nem
+  garancia).
+
+---
+
 ## [0.5.0] — 2026-05-05 — Rendelő modul teljes port + Email integráció
 
 A Hub a régi `nyomda_rendelo` repó **összes** funkcionalitását átvette,

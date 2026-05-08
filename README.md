@@ -669,7 +669,7 @@ A grafikus storage szervert lokál fejlesztésnél nem mountoljuk — a `COREL_P
 Részletes fázis-by-fázis tracker: [`ROADMAP.md`](ROADMAP.md).
 Release notes: [`CHANGELOG.md`](CHANGELOG.md).
 
-**Aktuális állás (2026-05-05):** v0.5.0 — **Fázis 0, 1, 2, 4 kész**, **Fázis 3** A4-PDF-fel részben kész (Corel makró még nincs). A Hub production-on fut a `192.168.1.69` LXC-n, és a régi `nyomda_rendelo` repó **összes** funkcióját átvette (Malfini B2B, CSV-importer, archívum, cascade dropdown, live notification).
+**Aktuális állás (2026-05-08):** v0.5.1 — **Fázis 0, 1, 2, 4 kész**, **Fázis 3** A4-PDF-fel részben kész (Corel makró még nincs). A Hub production-on fut a `192.168.1.69` LXC-n, és a régi `nyomda_rendelo` repó **összes** funkcióját átvette (Malfini B2B, CSV-importer, archívum, cascade dropdown, live notification). Az ügyfeleknek 5-karakteres egyedi azonosító (`XX###`) jár regisztráláskor, retroaktív backfill-lel a meglévőkre.
 
 | Fázis | Cél | Státusz |
 |-------|-----|---------|
